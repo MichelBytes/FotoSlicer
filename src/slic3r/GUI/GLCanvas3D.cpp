@@ -192,7 +192,7 @@ using namespace std::string_view_literals;
 static constexpr const float TRACKBALLSIZE = 0.8f;
 
 static Slic3r::ColorRGBA DEFAULT_BG_LIGHT_COLOR      = { 0.906f, 0.906f, 0.906f, 1.0f };
-static Slic3r::ColorRGBA DEFAULT_BG_LIGHT_COLOR_DARK = { 0.329f, 0.329f, 0.353f, 1.0f };
+static Slic3r::ColorRGBA DEFAULT_BG_LIGHT_COLOR_DARK = { 0.157f, 0.157f, 0.157f, 1.0f };
 static Slic3r::ColorRGBA ERROR_BG_LIGHT_COLOR        = { 0.753f, 0.192f, 0.039f, 1.0f };
 static Slic3r::ColorRGBA ERROR_BG_LIGHT_COLOR_DARK   = { 0.753f, 0.192f, 0.039f, 1.0f };
 
@@ -4235,6 +4235,10 @@ bool GLCanvas3D::handle_shortcut(const KeyChord& chord)
     case Shortcut::SelectAllPlates:
         if (!painting && !m_layers_editing.is_enabled())
             post_event(SimpleEvent(EVT_GLCANVAS_SELECT_ALL));
+        break;
+    case Shortcut::DeselectAll:
+        if (!painting && !m_layers_editing.is_enabled())
+            deselect_all();
         break;
     case Shortcut::Copy:  if (!painting) post_event(SimpleEvent(EVT_GLTOOLBAR_COPY)); break;
     case Shortcut::Paste: if (!painting) post_event(SimpleEvent(EVT_GLTOOLBAR_PASTE)); break;

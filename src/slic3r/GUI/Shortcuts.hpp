@@ -28,7 +28,7 @@ enum class Shortcut : uint8_t {
     // Slicing and printing
     SlicePlate, ExportSlicedFile, PrintPlate, PrintHostQueue,
     // Selection
-    SelectAll, SelectAllPlates,
+    SelectAll, SelectAllPlates, DeselectAll,
     // Editing
     Undo, Redo, Cut, Copy, Paste, DeleteSelected, DeleteAll, CloneSelected,
     // Objects

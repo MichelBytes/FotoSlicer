@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <boost/filesystem/operations.hpp>
 #include <boost/algorithm/string/predicate.hpp>
+#include <boost/algorithm/string/replace.hpp>
+#include <string>
 #include <cmath>
 #include <cstdio>
 #include <cstddef>
@@ -66,7 +68,10 @@ NSVGimage *parse_file(const char * filepath) {
     if (readed_size != size)
         return nullptr;
 
-    return nsvgParse(data_ptr.get(), "px", 96.0f);
+    // Layerform: Orca's teal accent becomes the blue accent.
+    std::string svg(data_ptr.get(), readed_size);
+    boost::replace_all(svg, "#2F6FD6", "#2F6FD6");
+    return nsvgParse(svg.data(), "px", 96.0f);
 }
 
 void subdata(unsigned char *data, size_t data_stride, const std::vector<unsigned char> &data2, size_t data2_row) {

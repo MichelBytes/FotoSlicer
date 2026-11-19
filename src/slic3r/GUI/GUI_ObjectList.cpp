@@ -157,13 +157,13 @@ public:
     wxRenderer() : wxDelegateRendererNative(wxRendererNative::Get()) {}
     virtual void DrawItemSelectionRect(wxWindow *win, wxDC& dc, const wxRect& rect, int flags = 0) override
     {   // ORCA draw selection background to improve consistency between platforms
-        dc.SetBrush(StateColor::darkModeColorFor(wxColour("#BFE1DE")));
+        dc.SetBrush(StateColor::darkModeColorFor(wxColour("#C9D9F5")));
         dc.DrawRectangle(rect);
         //GetGeneric().DrawItemSelectionRect(win, dc, rect, flags);
     }
     virtual void DrawFocusRect(        wxWindow *win, wxDC& dc, const wxRect& rect, int flags = 0) override
     {   // ORCA draw focus rectangle to improve consistency between platforms
-        dc.SetPen(  StateColor::darkModeColorFor(wxColour("#009688")));
+        dc.SetPen(  StateColor::darkModeColorFor(wxColour("#2F6FD6")));
         dc.DrawRectangle(rect);
     }
     virtual void DrawTreeItemButton(   wxWindow *win, wxDC& dc, const wxRect& rect, int flags = 0) override
@@ -1885,6 +1885,7 @@ bool ObjectList::dispatch_shortcut(Shortcut shortcut)
     switch (shortcut) {
     case Shortcut::DeleteSelected:  remove(); break;
     case Shortcut::SelectAll:       select_item_all_children(); break;
+    case Shortcut::DeselectAll:     wxGetApp().plater()->deselect_all(); break;
     case Shortcut::Copy:            copy(); break;
     case Shortcut::Paste:           paste(); break;
     case Shortcut::Cut:             cut(); break;

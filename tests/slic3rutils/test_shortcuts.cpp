@@ -288,7 +288,35 @@ TEST_CASE("Lookups are scoped to the context of the key press", "[Shortcuts]")
 
     CHECK(registry.lookup(ShortcutContext::Plater, c) == Shortcut::GizmoCut);
     CHECK(registry.lookup(ShortcutContext::Preview, c) == Shortcut::ToggleGcodeWindow);
-    CHECK(registry.lookup(ShortcutContext::Painting, c) == Shortcut::PaintToolCircle);
+
+    // Layerform: B is Photoshop's Brush, both to open color painting and to pick its circle brush.
+    const KeyChord b{ 'B' };
+    CHECK(registry.lookup(ShortcutContext::Plater, b) == Shortcut::GizmoMmuSegmentation);
+    CHECK(registry.lookup(ShortcutContext::Painting, b) == Shortcut::PaintToolCircle);
+}
+
+TEST_CASE("Layerform defaults follow Photoshop's keys", "[Shortcuts]")
+{
+    ShortcutRegistry registry;
+    CHECK(registry.binding(Shortcut::GizmoMove) == KeyChord{ 'V' });
+    CHECK(registry.binding(Shortcut::GizmoScale) == KeyChord{ 'T', wxMOD_CONTROL });
+    CHECK(registry.binding(Shortcut::GizmoCut) == KeyChord{ 'C' });
+    CHECK(registry.binding(Shortcut::GizmoEmboss) == KeyChord{ 'T' });
+    CHECK(registry.binding(Shortcut::GizmoSeam) == KeyChord{ 'P' });
+    CHECK(registry.binding(Shortcut::CloneSelected) == KeyChord{ 'J', wxMOD_CONTROL });
+    CHECK(registry.binding(Shortcut::DeselectAll) == KeyChord{ 'D', wxMOD_CONTROL });
+    CHECK(registry.binding(Shortcut::Redo) == KeyChord{ 'Z', wxMOD_CONTROL | wxMOD_SHIFT });
+    CHECK(registry.binding(Shortcut::PrintPlate) == KeyChord{ 'P', wxMOD_CONTROL });
+    CHECK(registry.binding(Shortcut::ZoomIn) == KeyChord{ '=', wxMOD_CONTROL });
+    CHECK(registry.binding(Shortcut::ZoomOut) == KeyChord{ '-', wxMOD_CONTROL });
+    CHECK(registry.binding(Shortcut::PaintToolFill) == KeyChord{ 'G' });
+#ifndef __APPLE__
+    CHECK(registry.binding(Shortcut::Preferences) == KeyChord{ 'K', wxMOD_CONTROL });
+#endif
+    // Ctrl+D deselects, so deleting everything takes a deliberate chord.
+    CHECK(registry.binding(Shortcut::DeleteAll).modifiers == (wxMOD_CONTROL | wxMOD_SHIFT));
+    // Space stays free for panning.
+    CHECK_FALSE(registry.lookup(ShortcutContext::Global, KeyChord{ WXK_SPACE }).has_value());
 }
 
 TEST_CASE("Tab shortcuts: jump-to-tab is unbound by default, Ctrl+Tab cycles", "[Shortcuts]")

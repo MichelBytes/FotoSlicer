@@ -19,6 +19,7 @@ set(SLIC3R_GUI_SOURCES
     GUI/Widgets/FilamentLoad.cpp
     GUI/Widgets/FilamentLoad.hpp
     GUI/AboutDialog.cpp
+    GUI/Branding.hpp
     GUI/AboutDialog.hpp
     GUI/AnimatedTexture.cpp
     GUI/AnimatedTexture.hpp

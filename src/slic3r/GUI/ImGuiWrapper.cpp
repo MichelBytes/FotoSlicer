@@ -204,16 +204,16 @@ const ImVec4 ImGuiWrapper::COL_GREEN_LIGHT       = { 0.f, 156 / 255.f, 136 / 255
 const ImVec4 ImGuiWrapper::COL_HOVER             = { 0.933f, 0.933f, 0.933f, 1.0f };
 const ImVec4 ImGuiWrapper::COL_ACTIVE            = { 0.675f, 0.675f, 0.675f, 1.0f };
 const ImVec4 ImGuiWrapper::COL_SEPARATOR         = { 0.93f, 0.93f, 0.93f, 1.0f };
-const ImVec4 ImGuiWrapper::COL_SEPARATOR_DARK    = { 0.24f, 0.24f, 0.27f, 1.0f };
+const ImVec4 ImGuiWrapper::COL_SEPARATOR_DARK    = { 0.267f, 0.267f, 0.267f, 1.0f };
 const ImVec4 ImGuiWrapper::COL_TITLE_BG          = { 0.745f, 0.745f, 0.745f, 1.0f };
 const ImVec4 ImGuiWrapper::COL_WINDOW_BG         = { 1.000f, 1.000f, 1.000f, 1.0f };
-const ImVec4 ImGuiWrapper::COL_WINDOW_BG_DARK    = { 45 / 255.f, 45 / 255.f, 49 / 255.f, 1.f };
+const ImVec4 ImGuiWrapper::COL_WINDOW_BG_DARK    = { 50 / 255.f, 50 / 255.f, 50 / 255.f, 1.f };
 const ImVec4 ImGuiWrapper::COL_TOOLBAR_BG        = { 250 / 255.f, 250 / 255.f, 250 / 255.f, 1.f }; // ORCA color matches with toolbar_background.png
-const ImVec4 ImGuiWrapper::COL_TOOLBAR_BG_DARK   = { 57  / 255.f, 60  / 255.f, 66  / 255.f, 1.f }; // ORCA color matches with toolbar_background_dark.png
+const ImVec4 ImGuiWrapper::COL_TOOLBAR_BG_DARK   = { 50  / 255.f, 50  / 255.f, 50  / 255.f, 1.f }; // ORCA color matches with toolbar_background_dark.png
 const ImVec4 ImGuiWrapper::COL_ORCA              = to_ImVec4(ColorRGBA::ORCA());
-const ImVec4 ImGuiWrapper::COL_ORCA_DARK         = { 0.f       , 103 / 255.f, 91  / 255.f, 1.f };
-const ImVec4 ImGuiWrapper::COL_ORCA_HOVER        = { 38 / 255.f, 166 / 255.f, 154 / 255.f, 1.f };
-const ImVec4 ImGuiWrapper::COL_ORCA_HOVER_DARK   = { 0.f       , 129 / 255.f, 114  / 255.f, 1.f };
+const ImVec4 ImGuiWrapper::COL_ORCA_DARK         = { 42 / 255.f, 99  / 255.f, 192 / 255.f, 1.f };
+const ImVec4 ImGuiWrapper::COL_ORCA_HOVER        = { 74 / 255.f, 134 / 255.f, 232 / 255.f, 1.f };
+const ImVec4 ImGuiWrapper::COL_ORCA_HOVER_DARK   = { 59 / 255.f, 123 / 255.f, 224 / 255.f, 1.f };
 const ImVec4 ImGuiWrapper::COL_MODIFIED          = { 253.f / 255.f, 111.f / 255.f, 40.f / 255.f, 1}; // ORCA same color with m_color_label_modified
 const ImVec4 ImGuiWrapper::COL_WARNING           = to_ImVec4(ColorRGB::WARNING());
 
@@ -228,7 +228,7 @@ bool get_data_from_svg(const std::string &filename, unsigned int max_size_px, Th
 {
     bool compression_enabled = false;
 
-    NSVGimage *image = nsvgParseFromFile(filename.c_str(), "px", 96.0f);
+    NSVGimage *image = BitmapCache::nsvgParseFromFileAccented(filename.c_str(), "px", 96.0f);
     if (image == nullptr) { return false; }
 
     float scale = (float) max_size_px / std::max(image->width, image->height);
@@ -2843,18 +2843,18 @@ void ImGuiWrapper::pop_common_window_style() {
 
 void ImGuiWrapper::push_confirm_button_style() {
     if (m_is_dark_mode) {
-        ImGui::PushStyleColor(ImGuiCol_Button,        to_ImVec4(decode_color_to_float_array("#00675b")));
+        ImGui::PushStyleColor(ImGuiCol_Button,        to_ImVec4(decode_color_to_float_array("#2A63C0")));
         ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.f / 255.f, 150.f / 255.f, 136.f / 255.f, 1.f));
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, to_ImVec4(decode_color_to_float_array("#008172")));
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  to_ImVec4(decode_color_to_float_array("#00675b")));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  to_ImVec4(decode_color_to_float_array("#2A63C0")));
         ImGui::PushStyleColor(ImGuiCol_CheckMark, ImVec4(1.f, 1.f, 1.f, 0.88f));
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.f, 1.f, 1.f, 0.88f));
     }
     else {
-        ImGui::PushStyleColor(ImGuiCol_Button,        to_ImVec4(decode_color_to_float_array("#009688")));
+        ImGui::PushStyleColor(ImGuiCol_Button,        to_ImVec4(decode_color_to_float_array("#2F6FD6")));
         ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.f / 255.f, 150.f / 255.f, 136.f / 255.f, 1.f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, to_ImVec4(decode_color_to_float_array("#26A69A")));
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  to_ImVec4(decode_color_to_float_array("#009688")));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, to_ImVec4(decode_color_to_float_array("#4A86E8")));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  to_ImVec4(decode_color_to_float_array("#2F6FD6")));
         ImGui::PushStyleColor(ImGuiCol_CheckMark, ImVec4(1.f, 1.f, 1.f, 1.f));
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.f, 1.f, 1.f, 1.f));
     }
@@ -2939,10 +2939,10 @@ void ImGuiWrapper::push_radio_style(const float scale)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(1.5f, 1.5f) * scale); // ORCA ensure icon size stays consistent
     if (m_is_dark_mode) {
-        ImGui::PushStyleColor(ImGuiCol_CheckMark, to_ImVec4(decode_color_to_float_array("#009688"))); // ORCA use orca color for radio buttons
+        ImGui::PushStyleColor(ImGuiCol_CheckMark, to_ImVec4(decode_color_to_float_array("#2F6FD6"))); // ORCA use orca color for radio buttons
         ImGui::PushStyleColor(ImGuiCol_Border   , to_ImVec4(decode_color_to_float_array("#949494"))); // ORCA match border color
     } else {
-        ImGui::PushStyleColor(ImGuiCol_CheckMark, to_ImVec4(decode_color_to_float_array("#009688"))); // ORCA use orca color for radio buttons
+        ImGui::PushStyleColor(ImGuiCol_CheckMark, to_ImVec4(decode_color_to_float_array("#2F6FD6"))); // ORCA use orca color for radio buttons
         ImGui::PushStyleColor(ImGuiCol_Border   , to_ImVec4(decode_color_to_float_array("#7C8282"))); // ORCA match border color
     }
 }
@@ -3654,7 +3654,7 @@ void ImGuiWrapper::sub_title(const std::string &label)
 
 bool IMTexture::load_from_svg_file(const std::string& filename, unsigned width, unsigned height, ImTextureID& texture_id)
 {
-    NSVGimage* image = nsvgParseFromFile(filename.c_str(), "px", 96.0f);
+    NSVGimage* image = BitmapCache::nsvgParseFromFileAccented(filename.c_str(), "px", 96.0f);
     if (image == nullptr) {
         return false;
     }

@@ -340,28 +340,30 @@ wxBitmap* BitmapCache::load_svg(const std::string &bitmap_name, unsigned target_
 
     // map of color replaces
     std::map<std::string, std::string> replaces;
-    replaces["\"#0x00AE42\""] = "\"#009688\"";
-    replaces["\"#00FF00\""] = "\"#52c7b8\"";
+    // Layerform: icons drawn in Orca's teal accent take the blue accent instead.
+    replaces["\"#0x00AE42\""] = "\"#2F6FD6\"";
+    replaces["\"#00FF00\""] = "\"#7FA8F0\"";
+    replaces["#009688"] = "#2F6FD6";
     if (dark_mode) {
         replaces["\"#262E30\""] = "\"#EFEFF0\"";
         replaces["\"#323A3D\""] = "\"#B3B3B5\"";
         replaces["\"#808080\""] = "\"#818183\"";
         //replaces["\"#ACACAC\""] = "\"#54545A\"";
-        replaces["\"#CECECE\""] = "\"#54545B\"";
+        replaces["\"#CECECE\""] = "\"#4A4A4A\"";
         replaces["\"#6B6B6B\""] = "\"#818182\"";
         replaces["\"#909090\""] = "\"#FFFFFF\"";
         replaces["\"#00FF00\""] = "\"#FF0000\"";
-        replaces["\"#009688\""] = "\"#00675b\"";
-        replaces["\"#F1F1F1\""] = "\"#36363B\"";
-        replaces["#DBDBDB"] = "#4A4A51"; // ORCA border color
-        replaces["#F0F0F1"] = "#333337"; // ORCA disabled background color
+        replaces["\"#009688\""] = "\"#2F6FD6\"";
+        replaces["\"#F1F1F1\""] = "\"#2C2C2C\"";
+        replaces["#DBDBDB"] = "#4D4D4D"; // ORCA border color
+        replaces["#F0F0F1"] = "#2F2F2F"; // ORCA disabled background color
         replaces["#262E30"] = "#EFEFF0"; // ORCA
     } else {
         replaces["#949494"] = "#7C8282"; // ORCA replace icon line color for light theme
     }
 
     if (strstr(bitmap_name.c_str(), "toggle_on") != NULL && dark_mode) // ORCA only replace color of toggle button
-        replaces["#009688"] = "#00675b";
+        replaces["#009688"] = "#2F6FD6";
 
     if (!new_color.empty())
         replaces["\"#009688\""] = "\"" + new_color + "\"";
@@ -571,6 +573,12 @@ bool BitmapCache::parse_color4(const std::string& scolor, unsigned char* rgba_ou
     }
     return true;
 }
+NSVGimage* BitmapCache::nsvgParseFromFileAccented(const char* filename, const char* units, float dpi)
+{
+    static const std::map<std::string, std::string> accent{ { "#009688", "#2F6FD6" } };
+    return nsvgParseFromFileWithReplace(filename, units, dpi, accent);
+}
+
 //BBS Replace svg green with the specified colour
 bool BitmapCache::load_from_svg_file_change_color(const std::string &filename, unsigned width, unsigned height, ImTextureID &texture_id, const char *hexColor)
 {

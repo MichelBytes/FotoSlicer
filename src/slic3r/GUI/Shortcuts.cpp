@@ -36,12 +36,19 @@ constexpr KeyChord TAB_NEXT_CHORD{ WXK_TAB, wxMOD_RAW_CONTROL };
 constexpr KeyChord TAB_PREVIOUS_CHORD{ WXK_TAB, wxMOD_RAW_CONTROL | wxMOD_SHIFT };
 constexpr KeyChord PREFERENCES_CHORD{ ',', CTRL };
 constexpr KeyChord DELETE_CHORD{ WXK_BACK };
+constexpr KeyChord DELETE_ALL_CHORD{ WXK_BACK, CTRL_SHIFT };
+// Cmd+, belongs to Preferences on macOS, so hiding a part takes Shift as well.
+constexpr KeyChord TOGGLE_PRINTABLE_CHORD{ ',', CTRL_SHIFT };
 constexpr KeyChord MOUSE3D_CHORD{ 'M', CTRL_SHIFT };
 #else
 constexpr KeyChord TAB_NEXT_CHORD{ WXK_TAB, CTRL };
 constexpr KeyChord TAB_PREVIOUS_CHORD{ WXK_TAB, CTRL_SHIFT };
-constexpr KeyChord PREFERENCES_CHORD{ 'P', CTRL };
+// Layerform: Photoshop keeps Preferences on Ctrl+K, which frees Ctrl+P for printing.
+constexpr KeyChord PREFERENCES_CHORD{ 'K', CTRL };
 constexpr KeyChord DELETE_CHORD{ WXK_DELETE };
+constexpr KeyChord DELETE_ALL_CHORD{ WXK_DELETE, CTRL_SHIFT };
+// Photoshop's Hide Layers.
+constexpr KeyChord TOGGLE_PRINTABLE_CHORD{ ',', CTRL };
 constexpr KeyChord MOUSE3D_CHORD{ 'M', CTRL };
 #endif
 
@@ -67,28 +74,29 @@ constexpr std::array<ShortcutInfo, size_t(Shortcut::Count)> shortcut_table = {{
 
     // Slicing and printing
     SHORTCUT(SlicePlate,        "slice_plate",        L("Slice plate"),                                          GLOBAL, { 'R', CTRL }),
-    SHORTCUT(ExportSlicedFile,  "export_sliced_file", L("Export plate sliced file"),                             GLOBAL, { 'G', CTRL }),
-    SHORTCUT(PrintPlate,        "print_plate",        L("Print plate"),                                          GLOBAL, { 'G', CTRL_SHIFT }),
-    SHORTCUT(PrintHostQueue,    "print_host_queue",   L("Print host upload queue"),                              GLOBAL, { 'J', CTRL }),
+    SHORTCUT(ExportSlicedFile,  "export_sliced_file", L("Export plate sliced file"),                             GLOBAL, { 'E', CTRL }),
+    SHORTCUT(PrintPlate,        "print_plate",        L("Print plate"),                                          GLOBAL, { 'P', CTRL }),
+    SHORTCUT(PrintHostQueue,    "print_host_queue",   L("Print host upload queue"),                              GLOBAL, { 'J', CTRL_SHIFT }),
 
     // Selection
     SHORTCUT(SelectAll,         "select_all",         L("Select all objects"),                                   PLATER | OBJECT_LIST, { 'A', CTRL }),
     SHORTCUT(SelectAllPlates,   "select_all_plates",  L("Select all objects on all plates"),                     PLATER,               { 'A', CTRL_SHIFT }),
+    SHORTCUT(DeselectAll,       "deselect_all",       L("Deselect all objects"),                                 PLATER | OBJECT_LIST, { 'D', CTRL }),
 
     // Editing
     REPEATING(Undo,             "undo",               L("Undo"),                                                 PLATER | OBJECT_LIST, { 'Z', CTRL }),
-    REPEATING(Redo,             "redo",               L("Redo"),                                                 PLATER | OBJECT_LIST, { 'Y', CTRL }),
+    REPEATING(Redo,             "redo",               L("Redo"),                                                 PLATER | OBJECT_LIST, { 'Z', CTRL_SHIFT }),
     SHORTCUT(Cut,               "cut",                L("Cut"),                                                  PLATER | OBJECT_LIST, { 'X', CTRL }),
     SHORTCUT(Copy,              "copy",               L("Copy to clipboard"),                                    PLATER | OBJECT_LIST, { 'C', CTRL }),
     SHORTCUT(Paste,             "paste",              L("Paste from clipboard"),                                 PLATER | OBJECT_LIST, { 'V', CTRL }),
     SHORTCUT(DeleteSelected,    "delete_selected",    L("Delete Selected"),                                      PLATER | OBJECT_LIST, DELETE_CHORD),
-    SHORTCUT(DeleteAll,         "delete_all",         L("Delete All"),                                           PLATER,               { 'D', CTRL }),
-    SHORTCUT(CloneSelected,     "clone_selected",     L("Clone Selected"),                                       PLATER | OBJECT_LIST, { 'K', CTRL }),
+    SHORTCUT(DeleteAll,         "delete_all",         L("Delete All"),                                           PLATER,               DELETE_ALL_CHORD),
+    SHORTCUT(CloneSelected,     "clone_selected",     L("Clone Selected"),                                       PLATER | OBJECT_LIST, { 'J', CTRL }),
 
     // Objects
     REPEATING(AddInstance,      "add_instance",       L("Add instance"),                                         PLATER | OBJECT_LIST, { '+' }),
     REPEATING(RemoveInstance,   "remove_instance",    L("Remove instance"),                                      PLATER | OBJECT_LIST, { '-' }),
-    SHORTCUT(TogglePrintable,   "toggle_printable",   L("Toggle printable for object/part"),                     PLATER | OBJECT_LIST, { 'V' }),
+    SHORTCUT(TogglePrintable,   "toggle_printable",   L("Toggle printable for object/part"),                     PLATER | OBJECT_LIST, TOGGLE_PRINTABLE_CHORD),
     SHORTCUT(ToggleAutoDrop,    "toggle_auto_drop",   L("Auto Drop"),                                            OBJECT_LIST,          { 'D' }),
     // Not F5, which ReloadDevicePage holds in the Plater context.
     SHORTCUT(ReloadFromDisk,    "reload_from_disk",   L("Reload from disk"),                                     PLATER | OBJECT_LIST, { 'R', CTRL_SHIFT }),
@@ -106,16 +114,16 @@ constexpr std::array<ShortcutInfo, size_t(Shortcut::Count)> shortcut_table = {{
     REPEATING(RotateSelectionRight, "rotate_selection_right", L("Rotate selection 45 degrees clockwise"),        PLATER, { WXK_PAGEDOWN }),
 
     // Gizmos
-    SHORTCUT(GizmoMove,         "gizmo_move",         L("Gizmo move"),                                           PLATER, { 'M' }),
+    SHORTCUT(GizmoMove,         "gizmo_move",         L("Gizmo move"),                                           PLATER, { 'V' }),
     SHORTCUT(GizmoRotate,       "gizmo_rotate",       L("Gizmo rotate"),                                         PLATER, { 'R' }),
-    SHORTCUT(GizmoScale,        "gizmo_scale",        L("Gizmo scale"),                                          PLATER, { 'S' }),
+    SHORTCUT(GizmoScale,        "gizmo_scale",        L("Gizmo scale"),                                          PLATER, { 'T', CTRL }),
     SHORTCUT(GizmoFlatten,      "gizmo_flatten",      L("Gizmo place face on bed"),                              PLATER, { 'F' }),
     SHORTCUT(GizmoCut,          "gizmo_cut",          L("Gizmo cut"),                                            PLATER, { 'C' }),
-    SHORTCUT(GizmoMeshBoolean,  "gizmo_mesh_boolean", L("Gizmo mesh boolean"),                                   PLATER, { 'B' }),
+    SHORTCUT(GizmoMeshBoolean,  "gizmo_mesh_boolean", L("Gizmo mesh boolean"),                                   PLATER, { 'B', SHIFT }),
     SHORTCUT(GizmoFdmSupports,  "gizmo_fdm_supports", L("Gizmo FDM paint-on supports"),                          PLATER, { 'L' }),
     SHORTCUT(GizmoSeam,         "gizmo_seam",         L("Gizmo FDM paint-on seam"),                              PLATER, { 'P' }),
     SHORTCUT(GizmoFuzzySkin,    "gizmo_fuzzy_skin",   L("Gizmo FDM paint-on fuzzy skin"),                        PLATER, { 'H' }),
-    SHORTCUT(GizmoMmuSegmentation, "gizmo_mmu_segmentation", L("Gizmo multi-material painting"),                 PLATER, { 'N' }),
+    SHORTCUT(GizmoMmuSegmentation, "gizmo_mmu_segmentation", L("Gizmo multi-material painting"),                 PLATER, { 'B' }),
     SHORTCUT(GizmoEmboss,       "gizmo_emboss",       L("Gizmo text emboss/engrave"),                            PLATER, { 'T' }),
     SHORTCUT(GizmoMeasure,      "gizmo_measure",      L("Gizmo measure"),                                        PLATER, { 'U' }),
     SHORTCUT(GizmoAssembly,     "gizmo_assembly",     L("Gizmo assemble"),                                       PLATER, { 'Y' }),
@@ -132,10 +140,10 @@ constexpr std::array<ShortcutInfo, size_t(Shortcut::Count)> shortcut_table = {{
     REPEATING(MovesSliderEnd,     "moves_slider_end",      L("Horizontal slider - Move to last position"),       PREVIEW, { WXK_END }),
 
     // Painting tools
-    SHORTCUT(PaintToolCircle,      "paint_tool_circle",       L("Circle"),                                       PAINTING, { 'C' }),
+    SHORTCUT(PaintToolCircle,      "paint_tool_circle",       L("Circle"),                                       PAINTING, { 'B' }),
     SHORTCUT(PaintToolSphere,      "paint_tool_sphere",       L("Sphere"),                                       PAINTING, { 'S' }),
-    SHORTCUT(PaintToolFill,        "paint_tool_fill",         L("Fill"),                                         PAINTING, { 'F' }),
-    SHORTCUT(PaintToolGapFill,     "paint_tool_gap_fill",     L("Gap Fill"),                                     PAINTING, { 'G' }),
+    SHORTCUT(PaintToolFill,        "paint_tool_fill",         L("Fill"),                                         PAINTING, { 'G' }),
+    SHORTCUT(PaintToolGapFill,     "paint_tool_gap_fill",     L("Gap Fill"),                                     PAINTING, { 'G', SHIFT }),
     SHORTCUT(PaintToolTriangle,    "paint_tool_triangle",     L("Triangle"),                                     PAINTING, { 'T' }),
     SHORTCUT(PaintToolHeightRange, "paint_tool_height_range", L("Height Range"),                                 PAINTING, { 'H' }),
 
@@ -148,12 +156,12 @@ constexpr std::array<ShortcutInfo, size_t(Shortcut::Count)> shortcut_table = {{
     SHORTCUT(ViewLeft,          "view_left",          L("Camera Angle - Left side"),                             GLOBAL, { '5', CTRL }),
     SHORTCUT(ViewRight,         "view_right",         L("Camera Angle - Right side"),                            GLOBAL, { '6', CTRL }),
     SHORTCUT(ViewPlate,         "view_plate",         L("Camera view - Current plate"),                          GLOBAL, { '7', CTRL }),
-    REPEATING(ZoomIn,           "zoom_in",            L("Zoom in"),                                              CANVAS, { 'I' }),
-    REPEATING(ZoomOut,          "zoom_out",           L("Zoom out"),                                             CANVAS, { 'O' }),
+    REPEATING(ZoomIn,           "zoom_in",            L("Zoom in"),                                              CANVAS, { '=', CTRL }),
+    REPEATING(ZoomOut,          "zoom_out",           L("Zoom out"),                                             CANVAS, { '-', CTRL }),
     SHORTCUT(Mouse3DSettings,   "mouse3d_settings",   L("Show/Hide 3Dconnexion devices settings dialog"),        CANVAS, MOUSE3D_CHORD),
 
     // Display
-    SHORTCUT(ShowLabels,        "show_labels",        L("Show object labels in 3D scene."),                      GLOBAL,  { 'E', CTRL }),
+    SHORTCUT(ShowLabels,        "show_labels",        L("Show object labels in 3D scene."),                      GLOBAL,  { 'H', CTRL }),
     SHORTCUT(ShowCollisionVolumes, "show_collision_volumes", L("Show all collision volumes"),                   GLOBAL,  { 'K', CTRL_SHIFT }),
     SHORTCUT(ShowWireframe,     "show_wireframe",     L("Show/Hide wireframe"),                                  CANVAS,  { WXK_RETURN, CTRL_SHIFT }),
     SHORTCUT(ToggleGcodeWindow,   "toggle_gcode_window",   L("On/Off G-code window"),                            PREVIEW, { 'C' }),
@@ -183,7 +191,7 @@ constexpr std::array<ShortcutInfo, size_t(Shortcut::Count)> shortcut_table = {{
     SHORTCUT(Quit,              "quit",               L("Quit"),                                                 GLOBAL, { 'Q', CTRL }),
 
     // Speed Dial
-    SHORTCUT(SpeedDial,         "speed_dial",         L("Open the Speed Dial"),                                  GLOBAL, { WXK_SPACE }),
+    SHORTCUT(SpeedDial,         "speed_dial",         L("Open the Speed Dial"),                                  GLOBAL, { WXK_SPACE, CTRL_SHIFT }),
 }};
 
 #undef SHORTCUT
