@@ -281,6 +281,28 @@ class MainFrame : public DPIFrame
     }
     // Runs the Global shortcut bound to chord; false when the focused control should see the key as well.
     bool handle_global_shortcut(const KeyChord& chord);
+    // Runs a Global shortcut's action, as its key would. chord is the key that triggered it; the
+    // overload without one is for menu items.
+    bool run_global_shortcut(Shortcut shortcut, const KeyChord& chord);
+    bool run_global_shortcut(Shortcut shortcut);
+
+    // FotoSlicer: the Photoshop menus that have no OrcaSlicer counterpart. Each holds existing slicer
+    // actions under the menu a Photoshop user looks in.
+    struct PhotoshopMenus
+    {
+        wxMenu* image  = nullptr;
+        wxMenu* layer  = nullptr;
+        wxMenu* type   = nullptr;
+        wxMenu* select = nullptr;
+        wxMenu* filter = nullptr;
+        wxMenu* slice  = nullptr;
+        wxMenu* window = nullptr;
+    };
+    PhotoshopMenus create_photoshop_menus();
+    // Opens the 3D tool a shortcut opens, from a menu.
+    void open_tool(Shortcut shortcut);
+    // Menus the Windows/Linux title bar pops up, which no menu bar owns.
+    std::vector<std::unique_ptr<wxMenu>> m_title_bar_menus;
     void add_common_view_menu_items(wxMenu* view_menu, std::function<bool(void)> can_change_view);
     wxMenu* generate_help_menu();
 

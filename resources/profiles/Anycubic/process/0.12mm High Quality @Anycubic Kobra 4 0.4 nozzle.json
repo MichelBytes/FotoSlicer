@@ -1,0 +1,12 @@
+{
+	"type": "process",
+	"name": "0.12mm High Quality @Anycubic Kobra 4 0.4 nozzle",
+	"inherits": "0.12mm High Quality @Anycubic Kobra 3 V2 0.4 nozzle",
+	"from": "system",
+	"setting_id": "iReOmJ2OM2tfh1aK",
+	"instantiation": "true",
+	"print_settings_id": "0.12mm High Quality @Anycubic Kobra 4 0.4 nozzle",
+	"compatible_printers": [
+		"Anycubic Kobra 4 0.4 nozzle"
+	]
+}

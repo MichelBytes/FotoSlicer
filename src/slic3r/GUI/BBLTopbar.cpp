@@ -52,6 +52,9 @@ enum CUSTOM_ID
     ID_TITLE,
     ID_MODEL_STORE,
     ID_CALIB,
+    // FotoSlicer menu-bar buttons: ID_MENU_BAR_FIRST + BBLTopbar::MenuBarMenu
+    ID_MENU_BAR_FIRST = 3150,
+    ID_MENU_BAR_LAST  = ID_MENU_BAR_FIRST + BBLTopbar::MenuBarCount - 1,
     ID_TOOL_BAR = 3200,
     ID_AMS_NOTEBOOK,
 };
@@ -119,7 +122,7 @@ public:
 
 void BBLTopbarArt::DrawBackground(wxDC& dc, wxWindow* wnd, const wxRect& rect)
 {
-    dc.SetBrush(wxBrush(wxColour(38, 46, 48)));
+    dc.SetBrush(wxBrush(wxColour(31, 31, 31)));
     wxRect clipRect = rect;
     clipRect.y -= 8;
     clipRect.height += 8;
@@ -293,6 +296,19 @@ void BBLTopbar::Init(wxFrame* parent)
 
     this->SetForegroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_HIGHLIGHTTEXT));
 
+    // FotoSlicer: Photoshop's menu bar after File. Each button pops up the menu MainFrame hands over
+    // through SetMenuBarMenu(); the labels are the menu names Photoshop users look for.
+    const wxString menu_bar_titles[MenuBarCount] = {
+        _L_CONTEXT("Edit", "Menu"),   _L_CONTEXT("Image", "Menu"),  _L_CONTEXT("Layer", "Menu"),
+        _L_CONTEXT("Type", "Menu"),   _L_CONTEXT("Select", "Menu"), _L_CONTEXT("Filter", "Menu"),
+        _L_CONTEXT("Slice", "Menu"),  _L("View"),                   _L_CONTEXT("Window", "Menu"),
+        _L("Help"),
+    };
+    for (int i = 0; i < MenuBarCount; ++i) {
+        this->AddSpacer(FromDIP(2));
+        this->AddTool(ID_MENU_BAR_FIRST + i, menu_bar_titles[i], wxBitmapBundle(), wxEmptyString, wxITEM_NORMAL);
+    }
+
     this->AddSpacer(FromDIP(5));
 
     wxBitmap dropdown_bitmap = create_scaled_bitmap("topbar_dropdown", nullptr, TOPBAR_ICON_SIZE);
@@ -387,6 +403,7 @@ void BBLTopbar::Init(wxFrame* parent)
     this->Bind(wxEVT_MENU_CLOSE, &BBLTopbar::OnMenuClose, this);
     this->Bind(wxEVT_AUITOOLBAR_TOOL_DROPDOWN, &BBLTopbar::OnFileToolItem, this, ID_TOP_FILE_MENU);
     this->Bind(wxEVT_AUITOOLBAR_TOOL_DROPDOWN, &BBLTopbar::OnDropdownToolItem, this, ID_TOP_DROPDOWN_MENU);
+    this->Bind(wxEVT_AUITOOLBAR_TOOL_DROPDOWN, &BBLTopbar::OnMenuBarItem, this, ID_MENU_BAR_FIRST, ID_MENU_BAR_LAST);
     this->Bind(wxEVT_AUITOOLBAR_TOOL_DROPDOWN, &BBLTopbar::OnCalibToolItem, this, ID_CALIB);
     this->Bind(wxEVT_AUITOOLBAR_TOOL_DROPDOWN, &BBLTopbar::OnIconize, this, wxID_ICONIZE_FRAME);
     this->Bind(wxEVT_AUITOOLBAR_TOOL_DROPDOWN, &BBLTopbar::OnFullScreen, this, wxID_MAXIMIZE_FRAME);
@@ -496,6 +513,13 @@ void BBLTopbar::SetFileMenu(wxMenu* file_menu)
 void BBLTopbar::AddDropDownSubMenu(wxMenu* sub_menu, const wxString& title)
 {
     m_top_menu.AppendSubMenu(sub_menu, title);
+}
+
+void BBLTopbar::SetMenuBarMenu(MenuBarMenu which, wxMenu* menu)
+{
+    if (which >= 0 && which < MenuBarCount)
+        m_menu_bar_menus[which] = menu;
+    EnableTool(ID_MENU_BAR_FIRST + which, menu != nullptr);
 }
 
 void BBLTopbar::AddDropDownMenuItem(wxMenuItem* menu_item)
@@ -680,6 +704,23 @@ void BBLTopbar::OnDropdownToolItem(wxAuiToolBarEvent& evt)
     tb->SetToolSticky(evt.GetId(), false);
 }
 
+void BBLTopbar::OnMenuBarItem(wxAuiToolBarEvent& evt)
+{
+    const int id    = evt.GetId();
+    wxMenu*   menu  = m_menu_bar_menus[id - ID_MENU_BAR_FIRST];
+    // A click on the button of the menu that just closed only closes it, as on a native menu bar.
+    const bool skip = m_skip_popup_menu_bar_id == id;
+    m_skip_popup_menu_bar_id = wxID_NONE;
+    if (menu == nullptr || skip)
+        return;
+
+    SetToolSticky(id, true);
+    const wxRect rec = GetToolRect(id);
+    GetParent()->PopupMenu(menu, wxPoint(rec.GetLeft(), GetSize().GetHeight() - 2));
+    // make sure the button is "un-stuck"
+    SetToolSticky(id, false);
+}
+
 void BBLTopbar::OnCalibToolItem(wxAuiToolBarEvent &evt)
 {
     wxAuiToolBar *tb = static_cast<wxAuiToolBar *>(evt.GetEventObject());
@@ -786,6 +827,9 @@ void BBLTopbar::OnMenuClose(wxMenuEvent& event)
     }
     else if (item == m_dropdown_menu_item) {
         m_skip_popup_dropdown_menu = true;
+    }
+    else if (item != nullptr && item->GetId() >= ID_MENU_BAR_FIRST && item->GetId() <= ID_MENU_BAR_LAST) {
+        m_skip_popup_menu_bar_id = item->GetId();
     }
 }
 

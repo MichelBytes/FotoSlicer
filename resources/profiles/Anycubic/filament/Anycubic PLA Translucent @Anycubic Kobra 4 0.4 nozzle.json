@@ -1,0 +1,14 @@
+{
+	"type": "filament",
+	"name": "Anycubic PLA Translucent @Anycubic Kobra 4 0.4 nozzle",
+	"inherits": "Anycubic PLA Translucent @Anycubic Kobra 3 V2 0.4 nozzle",
+	"from": "system",
+	"setting_id": "yjqrenB74fpejXNt",
+	"instantiation": "true",
+	"filament_settings_id": [
+		"Anycubic PLA Translucent @Anycubic Kobra 4 0.4 nozzle"
+	],
+	"compatible_printers": [
+		"Anycubic Kobra 4 0.4 nozzle"
+	]
+}

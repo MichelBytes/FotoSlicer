@@ -9,6 +9,8 @@
 #include <wx/string.h>
 #include <wx/gdicmn.h>
 #include <wx/event.h>
+
+#include <array>
 #include "slic3r/GUI/DeviceCore/DevDefs.h"
 
 class wxFrame;
@@ -38,6 +40,9 @@ private:
 class BBLTopbar : public wxAuiToolBar
 {
 public:
+    // FotoSlicer: the Photoshop-style menus shown as text buttons right after File, in this order.
+    enum MenuBarMenu { MenuEdit, MenuImage, MenuLayer, MenuType, MenuSelect, MenuFilter, MenuSlice, MenuView, MenuWindow, MenuHelp, MenuBarCount };
+
     BBLTopbar(wxWindow* pwin, wxFrame* parent);
     BBLTopbar(wxFrame* parent);
     void Init(wxFrame *parent);
@@ -49,6 +54,7 @@ public:
     void OnCloseFrame(wxAuiToolBarEvent& event);
     void OnFileToolItem(wxAuiToolBarEvent& evt);
     void OnDropdownToolItem(wxAuiToolBarEvent& evt);
+    void OnMenuBarItem(wxAuiToolBarEvent& evt);
     void OnCalibToolItem(wxAuiToolBarEvent &evt);
     void OnMouseLeftDClock(wxMouseEvent& mouse);
     void OnMouseLeftDown(wxMouseEvent& event);
@@ -67,6 +73,8 @@ public:
     void SetFileMenu(wxMenu* file_menu);
     void AddDropDownSubMenu(wxMenu* sub_menu, const wxString& title);
     void AddDropDownMenuItem(wxMenuItem* menu_item);
+    // The menu a menu-bar button opens. The topbar does not own it; MainFrame keeps it alive.
+    void SetMenuBarMenu(MenuBarMenu which, wxMenu* menu);
     wxMenu *GetTopMenu();
     wxMenu *GetCalibMenu();
     void SetTitle(wxString title);
@@ -114,4 +122,7 @@ private:
     bool m_skip_popup_file_menu;
     bool m_skip_popup_dropdown_menu;
     bool m_skip_popup_calib_menu;
+    std::array<wxMenu*, MenuBarCount> m_menu_bar_menus{};
+    // The menu-bar button whose menu just closed under the mouse, so the click that closed it does not reopen it.
+    int m_skip_popup_menu_bar_id{ wxID_NONE };
 };

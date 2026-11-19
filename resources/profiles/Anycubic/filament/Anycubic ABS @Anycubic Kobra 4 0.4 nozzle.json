@@ -1,0 +1,14 @@
+{
+	"type": "filament",
+	"name": "Anycubic ABS @Anycubic Kobra 4 0.4 nozzle",
+	"inherits": "Anycubic ABS @Anycubic Kobra 3 V2 0.4 nozzle",
+	"from": "system",
+	"setting_id": "jX9RlVXZbygm7YUI",
+	"instantiation": "true",
+	"filament_settings_id": [
+		"Anycubic ABS @Anycubic Kobra 4 0.4 nozzle"
+	],
+	"compatible_printers": [
+		"Anycubic Kobra 4 0.4 nozzle"
+	]
+}

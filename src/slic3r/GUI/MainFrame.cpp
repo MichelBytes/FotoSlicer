@@ -849,8 +849,14 @@ bool MainFrame::handle_global_shortcut(const KeyChord& chord)
     const std::optional<Shortcut> shortcut = wxGetApp().shortcuts().lookup(ShortcutContext::Global, chord);
     if (!shortcut.has_value())
         return false;
+    return run_global_shortcut(*shortcut, chord);
+}
 
-    switch (*shortcut) {
+bool MainFrame::run_global_shortcut(Shortcut shortcut) { return run_global_shortcut(shortcut, KeyChord{}); }
+
+bool MainFrame::run_global_shortcut(Shortcut shortcut, const KeyChord& chord)
+{
+    switch (shortcut) {
     case Shortcut::GoToHome:    m_tabpanel->SelectPageByName(TAB_ID_HOME); break;
 #ifdef SLIC3R_CAD
     case Shortcut::GoToDesign:  m_tabpanel->SelectPageByName(TAB_ID_DESIGN); break;
@@ -870,7 +876,7 @@ bool MainFrame::handle_global_shortcut(const KeyChord& chord)
         const int count = int(m_tabpanel->GetPageCount());
         int       sel   = m_tabpanel->GetSelection();
         if (count > 1 && sel != wxNOT_FOUND) {
-            const int step = (*shortcut == Shortcut::TabNext) ? 1 : count - 1;
+            const int step = (shortcut == Shortcut::TabNext) ? 1 : count - 1;
             // Skip a tab that vetoes the switch, such as Device without the network plug-in
             for (int tried = 1; tried < count; ++tried) {
                 sel = (sel + step) % count;
@@ -3020,6 +3026,180 @@ void MainFrame::add_common_view_menu_items(wxMenu* view_menu, std::function<bool
         "", nullptr, [can_change_view]() { return can_change_view(); }, this);
 }
 
+void MainFrame::open_tool(Shortcut shortcut)
+{
+    if (m_plater == nullptr)
+        return;
+    // The tools live in the Prepare view.
+    if (!m_plater->is_view3D_shown())
+        m_tabpanel->SelectPageByName(TAB_ID_PREPARE);
+    GLCanvas3D* canvas = m_plater->get_view3D_canvas3D();
+    if (canvas != nullptr && canvas->get_gizmos_manager().open_gizmo_by_shortcut(shortcut)) {
+        canvas->set_as_dirty();
+        canvas->request_extra_frame();
+    }
+}
+
+MainFrame::PhotoshopMenus MainFrame::create_photoshop_menus()
+{
+    // Every item runs an action the slicer already has, from the toolbar, the right-click menus or a
+    // key. The key a shortcut has is shown next to the item and is display-only here, so a rebinding
+    // in Preferences still shows correctly and no key is bound twice.
+    PhotoshopMenus ps;
+    auto has_selection   = [this]() { return m_plater != nullptr && !m_plater->is_selection_empty(); };
+    auto object_selected = []() { return wxGetApp().obj_list() != nullptr && wxGetApp().obj_list()->get_selected_obj_idx() >= 0; };
+    auto tool = [this](wxMenu* menu, Shortcut shortcut, const wxString& label, const wxString& description,
+                       std::function<bool()> enabled) {
+        append_shortcut_item(menu, shortcut, false, label, description,
+            [this, shortcut](wxCommandEvent&) { open_tool(shortcut); }, "", nullptr, std::move(enabled), this);
+    };
+    auto open_gizmo = [this](GLGizmosManager::EType type) {
+        if (m_plater == nullptr)
+            return;
+        if (!m_plater->is_view3D_shown())
+            m_tabpanel->SelectPageByName(TAB_ID_PREPARE);
+        if (GLCanvas3D* canvas = m_plater->get_view3D_canvas3D(); canvas != nullptr && canvas->get_gizmos_manager().open_gizmo(type))
+            canvas->set_as_dirty();
+    };
+
+    // Image: the whole model and its place on the plate, like Photoshop's image and canvas commands.
+    ps.image = new wxMenu();
+    tool(ps.image, Shortcut::GizmoScale, _L("Free Transform"), _L("Scale the selection with handles"), has_selection);
+    tool(ps.image, Shortcut::GizmoRotate, _L("Rotate"), _L("Rotate the selection"), has_selection);
+    tool(ps.image, Shortcut::GizmoFlatten, _L("Lay on Face"), _L("Click a face of the model to place it on the plate"), has_selection);
+    tool(ps.image, Shortcut::GizmoCut, _L("Crop (Cut Model)"), _L("Cut the model with a plane"), has_selection);
+    ps.image->AppendSeparator();
+    append_menu_item(ps.image, wxID_ANY, _L("Mirror Along X"), _L("Mirror the selection along the X axis"),
+        [this](wxCommandEvent&) { m_plater->mirror(X); }, "", nullptr, [this]() { return m_plater != nullptr && m_plater->can_mirror(); }, this);
+    append_menu_item(ps.image, wxID_ANY, _L("Mirror Along Y"), _L("Mirror the selection along the Y axis"),
+        [this](wxCommandEvent&) { m_plater->mirror(Y); }, "", nullptr, [this]() { return m_plater != nullptr && m_plater->can_mirror(); }, this);
+    append_menu_item(ps.image, wxID_ANY, _L("Mirror Along Z"), _L("Mirror the selection along the Z axis"),
+        [this](wxCommandEvent&) { m_plater->mirror(Z); }, "", nullptr, [this]() { return m_plater != nullptr && m_plater->can_mirror(); }, this);
+    ps.image->AppendSeparator();
+    append_shortcut_item(ps.image, Shortcut::Orient, false, _L("Auto Orient"), _L("Turn the objects to the best side for printing"),
+        [this](wxCommandEvent&) { m_plater->orient(); }, "", nullptr, [this]() { return m_plater != nullptr && m_plater->can_arrange(); }, this);
+    append_shortcut_item(ps.image, Shortcut::Arrange, false, _L("Arrange All"), _L("Arrange all objects on the plates"),
+        [this](wxCommandEvent&) { m_plater->arrange(); }, "", nullptr, [this]() { return m_plater != nullptr && m_plater->can_arrange(); }, this);
+    append_menu_item(ps.image, wxID_ANY, _L("Center on Plate"), _L("Move the selection to the middle of the plate"),
+        [this](wxCommandEvent&) { m_plater->center_selection(); }, "", nullptr, has_selection, this);
+    append_menu_item(ps.image, wxID_ANY, _L("Scale to Fit Plate"), _L("Scale the selection to the largest size the printer can print"),
+        [this](wxCommandEvent&) { m_plater->scale_selection_to_fit_print_volume(); }, "", nullptr, has_selection, this);
+    ps.image->AppendSeparator();
+    append_menu_item(ps.image, wxID_ANY, _L("Simplify Mesh"), _L("Reduce the number of triangles in the model"),
+        [open_gizmo](wxCommandEvent&) { open_gizmo(GLGizmosManager::Simplify); }, "", nullptr,
+        [this]() { return m_plater != nullptr && m_plater->can_simplify(); }, this);
+    tool(ps.image, Shortcut::GizmoMeshBoolean, _L("Mesh Boolean"), _L("Combine, subtract or intersect parts"), has_selection);
+
+    // Layer: the parts of an object, which Photoshop users know as layers.
+    ps.layer = new wxMenu();
+    struct NewPart { ModelVolumeType type; wxString label; };
+    const NewPart new_parts[] = {
+        { ModelVolumeType::MODEL_PART,         _L("New Part") },
+        { ModelVolumeType::PARAMETER_MODIFIER, _L("New Modifier") },
+        { ModelVolumeType::NEGATIVE_VOLUME,    _L("New Negative Part") },
+        { ModelVolumeType::SUPPORT_BLOCKER,    _L("New Support Blocker") },
+        { ModelVolumeType::SUPPORT_ENFORCER,   _L("New Support Enforcer") },
+    };
+    for (const NewPart& part : new_parts) {
+        wxMenu* shapes = new wxMenu();
+        // The untranslated shape name selects the shape; the label is its translation.
+        for (const char* shape : { L("Cube"), L("Cylinder"), L("Sphere"), L("Cone") }) {
+            const ModelVolumeType type = part.type;
+            append_menu_item(shapes, wxID_ANY, _(shape), "",
+                [type, shape](wxCommandEvent&) { wxGetApp().obj_list()->load_generic_subobject(shape, type); },
+                "", nullptr, object_selected, this);
+        }
+        append_submenu(ps.layer, shapes, wxID_ANY, part.label, "", "", object_selected, this);
+    }
+    ps.layer->AppendSeparator();
+    append_shortcut_item(ps.layer, Shortcut::CloneSelected, false, _L("Duplicate"), _L("Make a copy of the selection"),
+        [this](wxCommandEvent&) { m_plater->clone_selection(); }, "", nullptr, [this]() { return can_clone(); }, this);
+    append_shortcut_item(ps.layer, Shortcut::DeleteSelected, false, _L("Delete"), _L("Delete the selection"),
+        [this](wxCommandEvent&) { m_plater->remove_selected(); }, "", nullptr, [this]() { return can_delete(); }, this);
+    append_shortcut_item(ps.layer, Shortcut::TogglePrintable, false, _L("Hide/Show (Printable)"), _L("Turn printing of the selection off or on"),
+        [](wxCommandEvent&) { wxGetApp().obj_list()->toggle_printable_state(); }, "", nullptr, has_selection, this);
+    ps.layer->AppendSeparator();
+    append_menu_item(ps.layer, wxID_ANY, _L("Split to Objects"), _L("Split the selected object into separate objects"),
+        [this](wxCommandEvent&) { m_plater->split_object(); }, "", nullptr,
+        [this]() { return m_plater != nullptr && m_plater->can_split_to_objects(); }, this);
+    append_menu_item(ps.layer, wxID_ANY, _L("Split to Parts"), _L("Split the selected object into parts"),
+        [this](wxCommandEvent&) { m_plater->split_volume(); }, "", nullptr,
+        [this]() { return m_plater != nullptr && m_plater->can_split_to_volumes(); }, this);
+    tool(ps.layer, Shortcut::GizmoAssembly, _L("Assemble"), _L("Fit parts together"), has_selection);
+
+    // Type: raised and engraved text and shapes.
+    ps.type = new wxMenu();
+    tool(ps.type, Shortcut::GizmoEmboss, _L("Add Text"), _L("Add raised text, or a new text object when nothing is selected"),
+         [this]() { return m_plater != nullptr; });
+    append_menu_item(ps.type, wxID_ANY, _L("Engrave Text"), _L("Cut text into the selected object"),
+        [](wxCommandEvent&) { MenuFactory::add_text_volume(ModelVolumeType::NEGATIVE_VOLUME); }, "", nullptr, object_selected, this);
+    ps.type->AppendSeparator();
+    append_menu_item(ps.type, wxID_ANY, _L("Add SVG Shape"), _L("Add a raised shape from an SVG file"),
+        [](wxCommandEvent&) { MenuFactory::add_svg_volume(ModelVolumeType::MODEL_PART); }, "", nullptr, object_selected, this);
+    append_menu_item(ps.type, wxID_ANY, _L("Engrave SVG Shape"), _L("Cut a shape from an SVG file into the selected object"),
+        [](wxCommandEvent&) { MenuFactory::add_svg_volume(ModelVolumeType::NEGATIVE_VOLUME); }, "", nullptr, object_selected, this);
+
+    // Select
+    ps.select = new wxMenu();
+    append_shortcut_item(ps.select, Shortcut::SelectAll, false, _L("All"), _L("Select all objects on the plate"),
+        [this](wxCommandEvent&) { m_plater->select_all(); }, "", nullptr, [this]() { return can_select(); }, this);
+    append_shortcut_item(ps.select, Shortcut::DeselectAll, false, _L("Deselect"), _L("Deselect all objects"),
+        [this](wxCommandEvent&) { m_plater->deselect_all(); }, "", nullptr, [this]() { return can_deselect(); }, this);
+
+    // Filter: surface effects and painting, which change how the surface prints.
+    ps.filter = new wxMenu();
+    tool(ps.filter, Shortcut::GizmoMmuSegmentation, _L("Color Paint (Brush)"), _L("Paint filament colors onto the model"), has_selection);
+    tool(ps.filter, Shortcut::GizmoFdmSupports, _L("Paint Supports"), _L("Paint where supports go or must not go"), has_selection);
+    tool(ps.filter, Shortcut::GizmoSeam, _L("Paint Seam"), _L("Paint where the layer seam goes"), has_selection);
+    ps.filter->AppendSeparator();
+    tool(ps.filter, Shortcut::GizmoFuzzySkin, _L("Fuzzy Skin"), _L("Paint a rough, textured surface"), has_selection);
+    tool(ps.filter, Shortcut::GizmoDisplacement, _L("Texture Displacement"), _L("Paint a texture onto the surface"), has_selection);
+    tool(ps.filter, Shortcut::GizmoBrimEars, _L("Brim Ears"), _L("Add small brim pads that hold corners down"), has_selection);
+    ps.filter->AppendSeparator();
+    append_menu_item(ps.filter, wxID_ANY, _L("Variable Layer Height"), _L("Make layers thinner where the model needs detail"),
+        [this](wxCommandEvent&) {
+            if (!m_plater->is_view3D_shown())
+                m_tabpanel->SelectPageByName(TAB_ID_PREPARE);
+            wxPostEvent(m_plater->get_view3D_canvas3D()->get_wxglcanvas(), SimpleEvent(EVT_GLTOOLBAR_LAYERSEDITING));
+        }, "", nullptr, [this]() { return m_plater != nullptr && m_plater->can_layers_editing(); }, this);
+    append_menu_item(ps.filter, wxID_ANY, _L("Height Range Modifier"), _L("Use other settings for a range of heights"),
+        [](wxCommandEvent&) { wxGetApp().obj_list()->layers_editing(); wxGetApp().params_panel()->switch_to_object(); }, "", nullptr,
+        []() { return wxGetApp().obj_list() != nullptr && wxGetApp().obj_list()->is_instance_or_object_selected(); }, this);
+
+    // Slice: slicing and sending to the printer.
+    ps.slice = new wxMenu();
+    append_shortcut_item(ps.slice, Shortcut::SlicePlate, false, _L("Slice Plate"), _L("Slice the current plate"),
+        [this](wxCommandEvent&) { run_global_shortcut(Shortcut::SlicePlate); }, "", nullptr, [this]() { return m_slice_enable; }, this);
+    append_shortcut_item(ps.slice, Shortcut::PrintPlate, false, _L("Print Plate"), _L("Send the sliced plate to the printer"),
+        [this](wxCommandEvent&) { run_global_shortcut(Shortcut::PrintPlate); }, "", nullptr, []() { return true; }, this);
+    append_shortcut_item(ps.slice, Shortcut::ExportSlicedFile, false, _L("Export Sliced File"), _L("Save the sliced plate as a file"),
+        [this](wxCommandEvent&) { run_global_shortcut(Shortcut::ExportSlicedFile); }, "", nullptr, [this]() { return can_export_gcode(); }, this);
+    append_shortcut_item(ps.slice, Shortcut::PrintHostQueue, false, _L("Upload Queue"), _L("Show the files waiting to be sent to printers"),
+        [this](wxCommandEvent&) { run_global_shortcut(Shortcut::PrintHostQueue); }, "", nullptr, []() { return true; }, this);
+    ps.slice->AppendSeparator();
+    append_shortcut_item(ps.slice, Shortcut::GoToPreview, false, _L("Preview Layers"), _L("Show the sliced layers"),
+        [this](wxCommandEvent&) { run_global_shortcut(Shortcut::GoToPreview); }, "", nullptr, []() { return true; }, this);
+
+    // Window: the app's pages and panels.
+    ps.window = new wxMenu();
+    const std::pair<Shortcut, wxString> pages[] = {
+        { Shortcut::GoToPrepare, _L("Prepare") }, { Shortcut::GoToPreview, _L("Preview") },
+        { Shortcut::GoToDevice, _L("Device") },   { Shortcut::GoToProject, _L("Project") },
+    };
+    for (const auto& [shortcut, label] : pages) {
+        const Shortcut page = shortcut;
+        append_shortcut_item(ps.window, page, false, label, "",
+            [this, page](wxCommandEvent&) { run_global_shortcut(page); }, "", nullptr, []() { return true; }, this);
+    }
+    ps.window->AppendSeparator();
+    append_shortcut_item(ps.window, Shortcut::CollapseSidebar, false, _L("Show/Hide Panels"), _L("Show or hide the side panels"),
+        [this](wxCommandEvent&) { m_plater->collapse_sidebar(!m_plater->is_sidebar_collapsed()); }, "", nullptr,
+        [this]() { return m_plater != nullptr; }, this);
+    append_shortcut_item(ps.window, Shortcut::KeyboardShortcuts, false, _L("Keyboard Shortcuts"), _L("Show the list of keyboard shortcuts"),
+        [](wxCommandEvent&) { wxGetApp().keyboard_shortcuts(ShortcutContext::Global); }, "", nullptr, []() { return true; }, this);
+    return ps;
+}
+
 void MainFrame::init_menubar_as_editor()
 {
 #ifdef __APPLE__
@@ -3617,10 +3797,29 @@ void MainFrame::init_menubar_as_editor()
 
 #ifndef __APPLE__
     m_topbar->SetFileMenu(fileMenu);
-    if (editMenu)
-        m_topbar->AddDropDownSubMenu(editMenu, _L_CONTEXT("Edit", "Menu"));
-    if (viewMenu)
-        m_topbar->AddDropDownSubMenu(viewMenu, _L("View"));
+    // FotoSlicer: Edit, View and Help sit in the title bar's Photoshop menu row with the new menus,
+    // instead of under the dropdown. Photoshop keeps Keyboard Shortcuts and Preferences in Edit.
+    if (editMenu) {
+        editMenu->AppendSeparator();
+        append_shortcut_item(editMenu, Shortcut::KeyboardShortcuts, false, _L("Keyboard Shortcuts"), _L("Show the list of keyboard shortcuts"),
+            [](wxCommandEvent&) { wxGetApp().keyboard_shortcuts(ShortcutContext::Global); });
+        append_shortcut_item(editMenu, Shortcut::Preferences, true, _L("Preferences"), "",
+            [](wxCommandEvent&) { wxGetApp().open_preferences(); }, "", nullptr, []() { return true; }, this);
+    }
+    {
+        const PhotoshopMenus ps = create_photoshop_menus();
+        const std::pair<BBLTopbar::MenuBarMenu, wxMenu*> row[] = {
+            { BBLTopbar::MenuEdit, editMenu },     { BBLTopbar::MenuImage, ps.image },   { BBLTopbar::MenuLayer, ps.layer },
+            { BBLTopbar::MenuType, ps.type },      { BBLTopbar::MenuSelect, ps.select }, { BBLTopbar::MenuFilter, ps.filter },
+            { BBLTopbar::MenuSlice, ps.slice },    { BBLTopbar::MenuView, viewMenu },    { BBLTopbar::MenuWindow, ps.window },
+            { BBLTopbar::MenuHelp, helpMenu },
+        };
+        for (const auto& [which, menu] : row) {
+            m_topbar->SetMenuBarMenu(which, menu);
+            if (menu != nullptr)
+                m_title_bar_menus.emplace_back(menu);
+        }
+    }
     //BBS add Preference
 
     append_shortcut_item(
@@ -3679,8 +3878,6 @@ void MainFrame::init_menubar_as_editor()
     //m_topbar->AddDropDownMenuItem(printer_item);
     //m_topbar->AddDropDownMenuItem(language_item);
     //m_topbar->AddDropDownMenuItem(config_item);
-    top_menu->AppendSeparator();
-    m_topbar->AddDropDownSubMenu(helpMenu, _L("Help"));
 
     // SoftFever calibrations
 
@@ -3781,6 +3978,18 @@ void MainFrame::init_menubar_as_editor()
     m_menubar->Append(fileMenu, wxString::Format("&%s", _L("File")));
     if (editMenu)
         m_menubar->Append(editMenu, wxString::Format("&%s", _L_CONTEXT("Edit", "Menu")));
+    {
+        // FotoSlicer: Photoshop's menus between Edit and View.
+        const PhotoshopMenus ps = create_photoshop_menus();
+        m_menubar->Append(ps.image, wxString::Format("&%s", _L_CONTEXT("Image", "Menu")));
+        m_menubar->Append(ps.layer, wxString::Format("&%s", _L_CONTEXT("Layer", "Menu")));
+        m_menubar->Append(ps.type, wxString::Format("&%s", _L_CONTEXT("Type", "Menu")));
+        m_menubar->Append(ps.select, wxString::Format("&%s", _L_CONTEXT("Select", "Menu")));
+        m_menubar->Append(ps.filter, wxString::Format("&%s", _L_CONTEXT("Filter", "Menu")));
+        m_menubar->Append(ps.slice, wxString::Format("&%s", _L_CONTEXT("Slice", "Menu")));
+        // macOS adds its own Window menu, and the pages are reachable from the tab bar.
+        delete ps.window;
+    }
     if (viewMenu)
         m_menubar->Append(viewMenu, wxString::Format("&%s", _L("View")));
     /*if (publishMenu)

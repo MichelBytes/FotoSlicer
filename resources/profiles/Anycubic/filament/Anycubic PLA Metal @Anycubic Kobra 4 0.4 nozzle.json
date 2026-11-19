@@ -1,0 +1,14 @@
+{
+	"type": "filament",
+	"name": "Anycubic PLA Metal @Anycubic Kobra 4 0.4 nozzle",
+	"inherits": "Anycubic PLA Metal @Anycubic Kobra 3 V2 0.4 nozzle",
+	"from": "system",
+	"setting_id": "knlZBA2jdBEiFiLN",
+	"instantiation": "true",
+	"filament_settings_id": [
+		"Anycubic PLA Metal @Anycubic Kobra 4 0.4 nozzle"
+	],
+	"compatible_printers": [
+		"Anycubic Kobra 4 0.4 nozzle"
+	]
+}

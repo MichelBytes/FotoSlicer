@@ -1,0 +1,12 @@
+{
+	"type": "process",
+	"name": "0.28mm Standard @Anycubic Kobra 4 0.4 nozzle",
+	"inherits": "0.28mm Standard @Anycubic Kobra 3 V2 0.4 nozzle",
+	"from": "system",
+	"setting_id": "YsZ7KgQ8bBqRNyjv",
+	"instantiation": "true",
+	"print_settings_id": "0.28mm Standard @Anycubic Kobra 4 0.4 nozzle",
+	"compatible_printers": [
+		"Anycubic Kobra 4 0.4 nozzle"
+	]
+}

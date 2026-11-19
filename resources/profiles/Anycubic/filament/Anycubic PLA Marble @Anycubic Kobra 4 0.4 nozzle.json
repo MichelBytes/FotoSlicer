@@ -1,0 +1,14 @@
+{
+	"type": "filament",
+	"name": "Anycubic PLA Marble @Anycubic Kobra 4 0.4 nozzle",
+	"inherits": "Anycubic PLA Marble @Anycubic Kobra 3 V2 0.4 nozzle",
+	"from": "system",
+	"setting_id": "FeKte3nZxGLRrx9q",
+	"instantiation": "true",
+	"filament_settings_id": [
+		"Anycubic PLA Marble @Anycubic Kobra 4 0.4 nozzle"
+	],
+	"compatible_printers": [
+		"Anycubic Kobra 4 0.4 nozzle"
+	]
+}
