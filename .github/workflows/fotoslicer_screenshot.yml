@@ -1,0 +1,132 @@
+name: FotoSlicer screenshot
+
+# Starts the Windows build on a runner with software OpenGL (Mesa llvmpipe), opens a model in
+# the Prepare view and takes a screenshot, so the layout can be checked without a Windows PC.
+# The pictures are committed to the "screenshots" branch as <commit>-<n>.png and latest-<n>.png.
+on:
+  workflow_call:
+    inputs:
+      same_run:
+        type: boolean
+        default: false
+  push:
+    branches:
+      - fotoslicer-shot
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  screenshot:
+    runs-on: windows-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Find the Windows build
+        id: run
+        shell: bash
+        run: |
+          if [ "${{ inputs.same_run }}" = "true" ]; then
+            echo "id=${{ github.run_id }}" >> "$GITHUB_OUTPUT"
+            echo "sha=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          run=$(gh run list --workflow fotoslicer_windows.yml --branch fotoslicer --status success --limit 1 --json databaseId,headSha --jq '.[0]')
+          echo "id=$(jq -r .databaseId <<<"$run")" >> "$GITHUB_OUTPUT"
+          echo "sha=$(jq -r .headSha <<<"$run")" >> "$GITHUB_OUTPUT"
+
+      - name: Download the portable app
+        uses: actions/download-artifact@v4
+        with:
+          pattern: OrcaSlicer_Windows_V*_portable
+          path: dl
+          run-id: ${{ steps.run.outputs.id }}
+          github-token: ${{ github.token }}
+
+      - name: Add software OpenGL
+        shell: pwsh
+        run: |
+          $app = (Get-ChildItem dl -Directory | Select-Object -First 1).FullName
+          "APP=$app" | Out-File -Append $env:GITHUB_ENV
+          gh release download -R pal1000/mesa-dist-win --pattern '*release-msvc.7z' --dir mesa
+          $archive = (Get-ChildItem mesa -Filter *.7z | Select-Object -First 1).FullName
+          & 'C:/Program Files/7-Zip/7z.exe' x -y -omesa/x $archive | Out-Null
+          Copy-Item mesa/x/x64/*.dll $app
+          Get-ChildItem $app -Filter *.dll | Where-Object Name -match 'opengl|gallium|glapi' | ForEach-Object Name
+
+      - name: Prepare settings and a model
+        shell: pwsh
+        run: |
+          $data = "$env:RUNNER_TEMP\fotodata"
+          New-Item -ItemType Directory -Force $data | Out-Null
+          "DATA=$data" | Out-File -Append $env:GITHUB_ENV
+          $conf = @{
+            app        = @{ language = 'en'; show_splash_screen = 'false'; dark_color_mode = '1'; version = '02.08.01.55' }
+            firstguide = @{ finish = 'true'; privacy_use = 'false' }
+            models     = @(@{ vendor = 'Anycubic'; model = 'Anycubic Kobra 4'; nozzle_diameter = '0.4' })
+            presets    = @{ machine = 'Anycubic Kobra 4 0.4 nozzle'; process = '0.20mm Standard @Anycubic Kobra 4 0.4 nozzle'; filaments = @('Anycubic PLA @Anycubic Kobra 4 0.4 nozzle') }
+          }
+          $conf | ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8NoBOM "$data\OrcaSlicer.conf"
+          # A 30 mm cube as ASCII STL.
+          $v = @(@(0,0,0),@(30,0,0),@(30,30,0),@(0,30,0),@(0,0,30),@(30,0,30),@(30,30,30),@(0,30,30))
+          $f = @(@(0,2,1),@(0,3,2),@(4,5,6),@(4,6,7),@(0,1,5),@(0,5,4),@(1,2,6),@(1,6,5),@(2,3,7),@(2,7,6),@(3,0,4),@(3,4,7))
+          $stl = "solid cube`n"
+          foreach ($t in $f) {
+            $stl += "facet normal 0 0 0`n outer loop`n"
+            foreach ($i in $t) { $stl += "  vertex $($v[$i][0]) $($v[$i][1]) $($v[$i][2])`n" }
+            $stl += " endloop`nendfacet`n"
+          }
+          $stl += "endsolid cube`n"
+          Set-Content -Encoding ascii "$env:RUNNER_TEMP\Cube.stl" $stl
+
+      - name: Run FotoSlicer and take screenshots
+        shell: pwsh
+        run: |
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          $screen = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+          "Screen: $($screen.Width) x $($screen.Height)"
+          New-Item -ItemType Directory -Force shots | Out-Null
+          $env:GALLIUM_DRIVER = 'llvmpipe'
+          $p = Start-Process -FilePath "$env:APP\orca-slicer.exe" -ArgumentList '--datadir', "`"$env:DATA`"", "`"$env:RUNNER_TEMP\Cube.stl`"" -PassThru
+          function Shot($n) {
+            $bmp = New-Object System.Drawing.Bitmap $screen.Width, $screen.Height
+            $g = [System.Drawing.Graphics]::FromImage($bmp)
+            $g.CopyFromScreen($screen.Location, [System.Drawing.Point]::Empty, $screen.Size)
+            $bmp.Save("shots\$n.png", [System.Drawing.Imaging.ImageFormat]::Png)
+            $g.Dispose(); $bmp.Dispose()
+          }
+          Start-Sleep 60; Shot 1
+          # Maximize the main window, then take the main picture.
+          Add-Type @"
+          using System; using System.Runtime.InteropServices;
+          public static class W { [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int c);
+                                  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h); }
+          "@
+          $p.Refresh()
+          if ($p.MainWindowHandle -ne 0) { [W]::ShowWindow($p.MainWindowHandle, 3) | Out-Null; [W]::SetForegroundWindow($p.MainWindowHandle) | Out-Null }
+          Start-Sleep 20; Shot 2
+          "Running: $(-not $p.HasExited)"
+          if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }
+          Get-ChildItem "$env:DATA\log" -ErrorAction SilentlyContinue | Select-Object -Last 1 | ForEach-Object { Get-Content $_.FullName -Tail 40 }
+
+      - name: Commit the screenshots
+        shell: bash
+        run: |
+          sha="${{ steps.run.outputs.sha }}"
+          git config --global user.name "FotoSlicer screenshots"
+          git config --global user.email "actions@users.noreply.github.com"
+          git clone --depth 1 --branch screenshots "https://x-access-token:${GH_TOKEN}@github.com/${GH_REPO}.git" pics 2>/dev/null || {
+            git init -q pics && git -C pics checkout -q --orphan screenshots
+            git -C pics remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GH_REPO}.git"
+          }
+          for f in shots/*.png; do
+            n=$(basename "$f" .png)
+            cp "$f" "pics/${sha:0:8}-$n.png"
+            cp "$f" "pics/latest-$n.png"
+          done
+          git -C pics add -A
+          git -C pics commit -q -m "Screenshots of ${sha:0:8}"
+          git -C pics push -q origin screenshots
