@@ -14,6 +14,7 @@
 #include <wx/gdicmn.h>
 #include <wx/pen.h>
 #include <wx/sizer.h>
+#include <wx/timer.h>
 #include <wx/vlbox.h>
 
 #include "AceFilamentDialog.hpp"
@@ -260,13 +261,12 @@ FilamentPanel::FilamentPanel(wxWindow* parent) : wxPanel(parent, wxID_ANY, wxDef
     hint->SetForegroundColour(dim_fg());
     sizer->Add(hint, 0, wxEXPAND | wxALL, FromDIP(8));
     SetSizer(sizer);
-    Bind(wxEVT_IDLE, [this](wxIdleEvent& event) {
-        on_idle();
-        event.Skip();
-    });
+    m_refresh.SetOwner(this);
+    Bind(wxEVT_TIMER, [this](wxTimerEvent&) { refresh(); });
+    m_refresh.Start(300);
 }
 
-void FilamentPanel::on_idle()
+void FilamentPanel::refresh()
 {
     if (!IsShownOnScreen())
         return;
@@ -319,13 +319,12 @@ HistoryPanel::HistoryPanel(wxWindow* parent) : wxPanel(parent, wxID_ANY, wxDefau
     m_list      = new HistoryList(this);
     sizer->Add(m_list, 1, wxEXPAND);
     SetSizer(sizer);
-    Bind(wxEVT_IDLE, [this](wxIdleEvent& event) {
-        on_idle();
-        event.Skip();
-    });
+    m_refresh.SetOwner(this);
+    Bind(wxEVT_TIMER, [this](wxTimerEvent&) { refresh(); });
+    m_refresh.Start(300);
 }
 
-void HistoryPanel::on_idle()
+void HistoryPanel::refresh()
 {
     Plater* plater = wxGetApp().plater();
     if (!IsShownOnScreen() || plater == nullptr)

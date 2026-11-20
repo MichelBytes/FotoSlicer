@@ -4,6 +4,7 @@
 #include <vector>
 
 #include <wx/panel.h>
+#include <wx/timer.h>
 
 class Button;
 class Label;
@@ -16,7 +17,7 @@ class FilamentList;
 class HistoryList;
 
 // FotoSlicer: the panels docked on the right, as Photoshop stacks Swatches, Layers and History.
-// They follow the project when idle; the Layers panel is the object list, moved out of the sidebar.
+// They follow the project a few times a second; the Layers panel is the object list, moved out of the sidebar.
 
 // The project's filaments: colour, material and, after an ACE sync, how much is left on each spool.
 // A click on one prints the selected parts with it.
@@ -28,11 +29,12 @@ public:
     void msw_rescale();
 
 private:
-    void on_idle();
+    void refresh();
 
     Label*        m_source{nullptr};
     Button*       m_sync{nullptr};
     FilamentList* m_list{nullptr};
+    wxTimer       m_refresh;
 };
 
 // Every step that can be undone, oldest first, and those that can be redone, greyed. A click
@@ -45,9 +47,10 @@ public:
     void msw_rescale();
 
 private:
-    void on_idle();
+    void refresh();
 
     HistoryList* m_list{nullptr};
+    wxTimer      m_refresh;
 };
 
 } // namespace GUI

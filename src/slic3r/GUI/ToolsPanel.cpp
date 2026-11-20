@@ -33,7 +33,7 @@ namespace GUI {
 
 namespace {
 
-constexpr int TOOL_ICON_PX = 26;
+constexpr int TOOL_ICON_PX = 22;
 
 wxColour panel_colour() { return StateColor::darkModeColorFor(wxColour("#F8F8F8")); }
 wxColour hover_colour() { return StateColor::darkModeColorFor(wxColour("#E4E4E4")); }
@@ -41,31 +41,56 @@ wxColour active_colour() { return wxColour(47, 111, 214); }
 
 struct ToolInfo
 {
-    Shortcut    shortcut;
-    const char* icon;
+    const char* icon; // null: a gap between groups
     const char* name;
+    // A 3D tool opens through its shortcut; an action button shows its shortcut, if it has one, in
+    // the tooltip and runs `action`.
+    Shortcut    shortcut;
+    bool        has_key;
+    void (*action)();
 };
 
-// Photoshop's order: move and transform, then the shaping tools, the brushes, type and the ruler.
-// A null icon is a gap between groups.
+Plater* plater() { return wxGetApp().plater(); }
+
+void zoom_to_fit()
+{
+    if (GLCanvas3D* canvas = plater() != nullptr ? plater()->get_view3D_canvas3D() : nullptr; canvas != nullptr) {
+        if (plater()->model().objects.empty())
+            canvas->zoom_to_bed();
+        else
+            canvas->zoom_to_volumes();
+        canvas->set_as_dirty();
+        canvas->request_extra_frame();
+    }
+}
+
+// The everyday plate actions first, then Photoshop's order: move and transform, the shaping tools,
+// the brushes, type, the ruler and the view.
 const ToolInfo TOOLS[] = {
-    {Shortcut::GizmoMove, "toolbar_move", L("Move Tool")},
-    {Shortcut::GizmoRotate, "toolbar_rotate", L("Rotate Tool")},
-    {Shortcut::GizmoScale, "toolbar_scale", L("Scale Tool")},
-    {Shortcut::GizmoMove, nullptr, nullptr},
-    {Shortcut::GizmoFlatten, "toolbar_flatten", L("Place on Face Tool")},
-    {Shortcut::GizmoCut, "toolbar_cut", L("Cut Tool")},
-    {Shortcut::GizmoMeshBoolean, "toolbar_meshboolean", L("Combine Shapes Tool")},
-    {Shortcut::GizmoBrimEars, "toolbar_brimears", L("Brim Ears Tool")},
-    {Shortcut::GizmoMove, nullptr, nullptr},
-    {Shortcut::GizmoMmuSegmentation, "mmu_segmentation", L("Color Brush Tool")},
-    {Shortcut::GizmoFdmSupports, "toolbar_support", L("Support Brush Tool")},
-    {Shortcut::GizmoSeam, "toolbar_seam", L("Seam Brush Tool")},
-    {Shortcut::GizmoFuzzySkin, "toolbar_fuzzy_skin_paint", L("Fuzzy Skin Brush Tool")},
-    {Shortcut::GizmoDisplacement, "toolbar_texture_displacement", L("Texture Brush Tool")},
-    {Shortcut::GizmoMove, nullptr, nullptr},
-    {Shortcut::GizmoEmboss, "toolbar_text", L("Type Tool")},
-    {Shortcut::GizmoMeasure, "toolbar_measure", L("Ruler Tool")},
+    {"fs_tool_import", L("Import Model"), Shortcut::ImportModel, true, [] { plater()->add_model(); }},
+    {"fs_tool_plate", L("Add Plate"), Shortcut::ImportModel, false, [] { plater()->add_plate(); }},
+    {"fs_tool_arrange", L("Arrange All Objects"), Shortcut::Arrange, true, [] { plater()->arrange(); }},
+    {"fs_tool_orient", L("Auto Orient"), Shortcut::Orient, true, [] { plater()->orient(); }},
+    {"fs_tool_delete", L("Delete Selected"), Shortcut::DeleteSelected, true, [] { plater()->remove_selected(); }},
+    {nullptr, nullptr, Shortcut::GizmoMove, false, nullptr},
+    {"fs_tool_move", L("Move Tool"), Shortcut::GizmoMove, true, nullptr},
+    {"fs_tool_rotate", L("Rotate Tool"), Shortcut::GizmoRotate, true, nullptr},
+    {"fs_tool_scale", L("Free Transform (Scale)"), Shortcut::GizmoScale, true, nullptr},
+    {nullptr, nullptr, Shortcut::GizmoMove, false, nullptr},
+    {"fs_tool_cut", L("Cut Tool"), Shortcut::GizmoCut, true, nullptr},
+    {"fs_tool_flat", L("Lay Flat Tool"), Shortcut::GizmoFlatten, true, nullptr},
+    {"fs_tool_boolean", L("Combine Shapes Tool"), Shortcut::GizmoMeshBoolean, true, nullptr},
+    {"fs_tool_brimears", L("Brim Ears Tool"), Shortcut::GizmoBrimEars, true, nullptr},
+    {nullptr, nullptr, Shortcut::GizmoMove, false, nullptr},
+    {"fs_tool_brush", L("Color Brush Tool"), Shortcut::GizmoMmuSegmentation, true, nullptr},
+    {"fs_tool_support", L("Support Brush Tool"), Shortcut::GizmoFdmSupports, true, nullptr},
+    {"fs_tool_seam", L("Seam Pen Tool"), Shortcut::GizmoSeam, true, nullptr},
+    {"fs_tool_fuzzy", L("Fuzzy Skin Brush Tool"), Shortcut::GizmoFuzzySkin, true, nullptr},
+    {"fs_tool_texture", L("Texture Brush Tool"), Shortcut::GizmoDisplacement, true, nullptr},
+    {nullptr, nullptr, Shortcut::GizmoMove, false, nullptr},
+    {"fs_tool_type", L("Type Tool"), Shortcut::GizmoEmboss, true, nullptr},
+    {"fs_tool_measure", L("Ruler Tool"), Shortcut::GizmoMeasure, true, nullptr},
+    {"fs_tool_zoom", L("Zoom to Fit"), Shortcut::GizmoMove, false, zoom_to_fit},
 };
 
 // The tool open in the 3D view, if any.
@@ -88,8 +113,7 @@ public:
     {
         SetBackgroundStyle(wxBG_STYLE_PAINT);
         SetMinSize(GetSize());
-        // TRN %1% is a tool's name, such as "Move Tool". The key that opens it follows in brackets.
-        SetToolTip(from_u8(wxGetApp().shortcuts().with_key(_u8L(m_tool.name), m_tool.shortcut)));
+        SetToolTip(m_tool.has_key ? from_u8(wxGetApp().shortcuts().with_key(_u8L(m_tool.name), m_tool.shortcut)) : _L(m_tool.name));
         load_icon();
         Bind(wxEVT_PAINT, [this](wxPaintEvent&) { paint(); });
         Bind(wxEVT_ENTER_WINDOW, [this](wxMouseEvent& event) {
@@ -104,15 +128,21 @@ public:
         });
         Bind(wxEVT_LEFT_UP, [this](wxMouseEvent& event) {
             event.Skip();
-            // Opening a tool moves the focus and may switch tabs: not on the mouse handler's stack.
-            wxGetApp().CallAfter([shortcut = m_tool.shortcut]() {
-                if (MainFrame* frame = wxGetApp().mainframe; frame != nullptr)
-                    frame->open_tool(shortcut);
+            // Opening a tool moves the focus and may switch tabs, an action may open a dialog: not on
+            // the mouse handler's stack.
+            wxGetApp().CallAfter([tool = m_tool]() {
+                if (wxGetApp().plater() == nullptr)
+                    return;
+                if (tool.action != nullptr)
+                    tool.action();
+                else if (MainFrame* frame = wxGetApp().mainframe; frame != nullptr)
+                    frame->open_tool(tool.shortcut);
             });
         });
     }
 
-    Shortcut shortcut() const { return m_tool.shortcut; }
+    // The 3D tool this button opens, if it opens one.
+    std::optional<Shortcut> tool() const { return m_tool.action == nullptr ? std::optional<Shortcut>(m_tool.shortcut) : std::nullopt; }
 
     void set_active(bool active)
     {
@@ -124,8 +154,8 @@ public:
 
     void load_icon()
     {
-        // Photoshop's tool icons are light grey on the dark panel; the 3D tools' own are accent coloured.
-        m_icon = create_scaled_bitmap(m_tool.icon, this, TOOL_ICON_PX, false, wxGetApp().dark_mode() ? "#D4D4D4" : "#3C3C3C");
+        // Photoshop's tool icons: near white line drawings on the dark panel.
+        m_icon = create_scaled_bitmap(m_tool.icon, this, TOOL_ICON_PX, false, wxGetApp().dark_mode() ? "#EDEDED" : "#323232");
         SetMinSize(FromDIP(wxSize(40, 36)));
         Refresh();
     }
@@ -205,14 +235,13 @@ ToolsPanel::ToolsPanel(wxWindow* parent) : wxPanel(parent, wxID_ANY, wxDefaultPo
     sizer->AddStretchSpacer(1);
     SetSizer(sizer);
 
-    // The filament list and the open tool change from everywhere; follow them when idle.
-    Bind(wxEVT_IDLE, [this](wxIdleEvent& event) {
-        on_idle();
-        event.Skip();
-    });
+    // The filament list and the open tool change from everywhere; follow them a few times a second.
+    m_refresh.SetOwner(this);
+    Bind(wxEVT_TIMER, [this](wxTimerEvent&) { refresh(); });
+    m_refresh.Start(250);
 }
 
-void ToolsPanel::on_idle()
+void ToolsPanel::refresh()
 {
     if (!IsShownOnScreen())
         return;
@@ -220,7 +249,7 @@ void ToolsPanel::on_idle()
     if (active != m_active_tool) {
         m_active_tool = active;
         for (ToolButton* button : m_tools)
-            button->set_active(active.has_value() && button->shortcut() == *active);
+            button->set_active(active.has_value() && button->tool() == active);
     }
     Plater* plater = wxGetApp().plater();
     if (plater == nullptr)
