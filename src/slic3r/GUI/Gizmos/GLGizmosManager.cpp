@@ -1274,8 +1274,6 @@ void GLGizmosManager::render_arrow(const GLCanvas3D& parent, EType highlighted_t
 void GLGizmosManager::do_render_overlay(bool draw_icons) const
 {
     const std::vector<size_t> selectable_idxs = get_strip_idxs();
-    if (selectable_idxs.empty())
-        return;
 
     const Size cnv_size = m_parent.get_canvas_size();
     const float cnv_w = (float)cnv_size.get_width();
@@ -1283,6 +1281,15 @@ void GLGizmosManager::do_render_overlay(bool draw_icons) const
 
     if (cnv_w == 0 || cnv_h == 0)
         return;
+
+    if (selectable_idxs.empty()) {
+        // FotoSlicer: the tool bar holds the icons, but the open tool's panel still shows, centred
+        // under the toolbar row where the strip would have put it. Gizmos rely on this call to
+        // draw (and set up) their panel.
+        if (!draw_icons && m_current != Undefined)
+            m_gizmos[m_current]->render_input_window(0.5f * cnv_w, get_scaled_total_height(), cnv_h);
+        return;
+    }
 
     const float inv_cnv_w = 1.0f / cnv_w;
     const float inv_cnv_h = 1.0f / cnv_h;
