@@ -5,6 +5,12 @@ name: FotoSlicer publish test build
 # artifact (which needs a GitHub sign-in and is hard to find). Run it from the Actions tab, or
 # push to the fotoslicer-publish branch.
 on:
+  # Called by the Windows build once it has uploaded its files.
+  workflow_call:
+    inputs:
+      same_run:
+        type: boolean
+        default: false
   push:
     branches:
       - fotoslicer-publish
@@ -22,17 +28,29 @@ jobs:
       GH_REPO: ${{ github.repository }}
       TAG: fotoslicer-test
     steps:
-      - name: Find the newest successful Windows build
+      - name: Find the Windows build
         id: run
         run: |
+          if [ "${{ inputs.same_run }}" = "true" ]; then
+            echo "id=${{ github.run_id }}" >> "$GITHUB_OUTPUT"
+            echo "sha=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           run=$(gh run list --workflow fotoslicer_windows.yml --branch fotoslicer --status success --limit 1 --json databaseId,headSha --jq '.[0]')
           test -n "$run" || { echo "No successful Windows build yet"; exit 1; }
           echo "id=$(jq -r .databaseId <<<"$run")" >> "$GITHUB_OUTPUT"
           echo "sha=$(jq -r .headSha <<<"$run")" >> "$GITHUB_OUTPUT"
 
       - name: Download the installer and the portable app
+        uses: actions/download-artifact@v4
+        with:
+          pattern: OrcaSlicer_Windows_V*
+          path: dl
+          run-id: ${{ steps.run.outputs.id }}
+          github-token: ${{ github.token }}
+
+      - name: Name the files
         run: |
-          gh run download "${{ steps.run.outputs.id }}" --pattern 'OrcaSlicer_Windows_V*' --dir dl
           mkdir out
           installer=$(find dl -path '*_x64/*' -name 'OrcaSlicer*Installer*.exe' | head -1)
           test -n "$installer"

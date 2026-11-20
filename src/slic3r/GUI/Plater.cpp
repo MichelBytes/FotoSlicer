@@ -182,6 +182,7 @@
 #include "libslic3r/Utils.hpp"
 #include "libslic3r/PresetBundle.hpp"
 #include "AceFilamentDialog.hpp"
+#include "ToolsPanel.hpp"
 #include "libslic3r/IMEXHelpers.hpp"
 #include "libslic3r/PublishSettings.hpp"
 #include "libslic3r/TriangleMesh.hpp"
@@ -3375,9 +3376,10 @@ Sidebar::Sidebar(Plater *parent)
                                                  wxBU_EXACTFIT | wxNO_BORDER, false, 16); // ORCA match icon size with other icons as 16x16
     ams_btn->SetToolTip(_L("Synchronize filament list from AMS"));
     ams_btn->Bind(wxEVT_BUTTON, [this](wxCommandEvent &e) {
-        // An Anycubic printer is not on the device page: its ACE unit is read over the LAN.
+        // FotoSlicer: with no printer on the device page, the filaments come from the ACE unit,
+        // read over the LAN, whatever printer profile is selected.
         DeviceManager* devices = wxGetApp().getDeviceManager();
-        if ((devices == nullptr || devices->get_selected_machine() == nullptr) && AceFilamentDialog::is_for_selected_printer()) {
+        if (devices == nullptr || devices->get_selected_machine() == nullptr) {
             AceFilamentDialog dlg(this);
             dlg.ShowModal();
             return;
@@ -7230,6 +7232,7 @@ struct Plater::priv
     // PIMPL back pointer ("Q-Pointer")
     Plater *q;
     Sidebar *  sidebar;
+    ToolsPanel* tools_panel{nullptr};
     MainFrame *main_frame;
 
     MenuFactory menus;
@@ -8011,6 +8014,22 @@ Plater::priv::priv(Plater *q, MainFrame *main_frame)
     // Orca: Make sidebar dockable
     m_aui_mgr.AddPane(sidebar, AuiMgr::sidebar_pane_info());
 
+    // FotoSlicer: Photoshop's tool bar, left of the 3D view.
+    tools_panel = new ToolsPanel(q);
+    m_aui_mgr.AddPane(tools_panel, wxAuiPaneInfo()
+                                       .Name("tools")
+                                       .Left()
+                                       .Layer(1)
+                                       .CaptionVisible(false)
+                                       .PaneBorder(false)
+                                       .CloseButton(false)
+                                       .Floatable(false)
+                                       .Movable(false)
+                                       .Dockable(false)
+                                       .Resizable(false)
+                                       .BestSize(tools_panel->GetBestSize())
+                                       .MinSize(tools_panel->GetBestSize()));
+
     // UV editor pane for GLGizmoTextureDisplacement's LSCM unwrap preview - a resizable/dockable
     // sibling of "sidebar"/"main" like everything else registered on this same AUI manager, not a
     // change to the view3D/preview/assemble_view sizer above. Hidden by default: only relevant
@@ -8058,6 +8077,11 @@ Plater::priv::priv(Plater *q, MainFrame *main_frame)
         // Load previous window layout
         const auto cfg    = wxGetApp().app_config;
         wxString   layout = wxString::FromUTF8(cfg->get("window_layout"));
+        // FotoSlicer moved the panels to Photoshop's places: a layout saved before that is dropped once.
+        if (cfg->get("fotoslicer_layout") != "1") {
+            layout.clear();
+            cfg->set("fotoslicer_layout", "1");
+        }
         if (!layout.empty()) {
             bool removed_floating_state = false;
 #ifdef __WXGTK__
@@ -22650,6 +22674,7 @@ void Plater::msw_rescale()
     p->view3D->get_canvas3d()->msw_rescale();
 
     p->sidebar->msw_rescale();
+    p->tools_panel->msw_rescale();
 
     p->menus.msw_rescale();
 
@@ -22661,6 +22686,7 @@ void Plater::sys_color_changed()
 {
     p->preview->sys_color_changed();
     p->sidebar->sys_color_changed();
+    p->tools_panel->sys_color_changed();
     p->menus.sys_color_changed();
     if (p->m_select_machine_dlg) p->m_select_machine_dlg->sys_color_changed();
 

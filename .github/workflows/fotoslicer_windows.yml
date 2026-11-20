@@ -25,3 +25,13 @@ jobs:
       arch: x64
       compiler: clang
     secrets: inherit
+
+  publish:
+    name: Publish the test release
+    needs: build_windows
+    permissions:
+      contents: write
+      actions: read
+    uses: ./.github/workflows/fotoslicer_publish.yml
+    with:
+      same_run: true

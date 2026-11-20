@@ -69,7 +69,8 @@ wxAuiPaneInfo AuiMgr::sidebar_pane_info()
 {
     return wxAuiPaneInfo()
         .Name("sidebar")
-        .Left()
+        // FotoSlicer: on the right, where Photoshop keeps its panels.
+        .Right()
         .CloseButton(false)
         .TopDockable(false)
         .BottomDockable(false)

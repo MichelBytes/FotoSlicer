@@ -299,8 +299,6 @@ class MainFrame : public DPIFrame
         wxMenu* window = nullptr;
     };
     PhotoshopMenus create_photoshop_menus();
-    // Opens the 3D tool a shortcut opens, from a menu.
-    void open_tool(Shortcut shortcut);
     // Menus the Windows/Linux title bar pops up, which no menu bar owns.
     std::vector<std::unique_ptr<wxMenu>> m_title_bar_menus;
     void add_common_view_menu_items(wxMenu* view_menu, std::function<bool(void)> can_change_view);
@@ -357,6 +355,8 @@ protected:
 #endif
 
 public:
+    // Opens the 3D tool a shortcut opens, from a menu or the tool bar.
+    void open_tool(Shortcut shortcut);
     MainFrame();
     ~MainFrame();
 #ifdef __APPLE__

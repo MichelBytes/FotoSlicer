@@ -177,12 +177,6 @@ AceFilamentDialog::AceFilamentDialog(wxWindow* parent)
 
 AceFilamentDialog::~AceFilamentDialog() { m_alive->store(false); }
 
-bool AceFilamentDialog::is_for_selected_printer()
-{
-    const PresetBundle* bundle = wxGetApp().preset_bundle;
-    return bundle != nullptr && boost::starts_with(bundle->printers.get_edited_preset().config.opt_string("printer_model"), "Anycubic");
-}
-
 void AceFilamentDialog::start_reading()
 {
     std::string host = into_u8(m_host->GetTextCtrl()->GetValue());

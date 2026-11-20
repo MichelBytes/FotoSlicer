@@ -26,9 +26,6 @@ public:
     explicit AceFilamentDialog(wxWindow* parent);
     ~AceFilamentDialog() override;
 
-    // The printer the sidebar has selected is an Anycubic one, so its sync button opens this.
-    static bool is_for_selected_printer();
-
 protected:
     void on_dpi_changed(const wxRect& suggested_rect) override;
 
