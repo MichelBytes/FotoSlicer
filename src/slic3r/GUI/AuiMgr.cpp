@@ -2,6 +2,7 @@
 
 #include "GUI_App.hpp"
 #include "I18N.hpp"
+#include "Widgets/Label.hpp"
 #ifdef __WXGTK__
 #include "LinuxDisplayBackend.hpp"
 #endif
@@ -39,6 +40,7 @@ void AuiMgr::init(wxWindow* window)
         SetFlags(GetFlags() & ~wxAUI_MGR_ALLOW_FLOATING);
 #endif
     GetArtProvider()->SetMetric(wxAUI_DOCKART_CAPTION_SIZE, window->FromDIP(24));
+    GetArtProvider()->SetFont(wxAUI_DOCKART_CAPTION_FONT, Label::Body_13.Bold());
     GetArtProvider()->SetMetric(wxAUI_DOCKART_GRADIENT_TYPE, wxAUI_GRADIENT_NONE);
     apply_color_mode();
 }

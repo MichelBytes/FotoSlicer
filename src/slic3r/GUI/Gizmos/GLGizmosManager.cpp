@@ -107,6 +107,13 @@ std::vector<size_t> GLGizmosManager::get_selectable_idxs() const
     return out;
 }
 
+std::vector<size_t> GLGizmosManager::get_strip_idxs() const
+{
+    if (m_parent.get_canvas_type() != GLCanvas3D::CanvasAssembleView)
+        return {};
+    return get_selectable_idxs();
+}
+
 //BBS: GUI refactor: GLToolbar&&Gizmo adjust
 GLGizmosManager::EType GLGizmosManager::get_gizmo_from_mouse(const Vec2d &mouse_pos) const
 {
@@ -141,7 +148,7 @@ GLGizmosManager::EType GLGizmosManager::get_gizmo_from_mouse(const Vec2d &mouse_
             return Undefined;
         // is it really on the icon or already past the border?
         if ((float)mouse_pos(0) <= top_x + from_left * stride_x + icons_size) {
-            std::vector<size_t> selectable = get_selectable_idxs();
+            std::vector<size_t> selectable = get_strip_idxs();
             if (from_left < selectable.size())
                 return static_cast<EType>(selectable[from_left]);
         }
@@ -1223,7 +1230,7 @@ void GLGizmosManager::render_background(float left, float top, float right, floa
 
 void GLGizmosManager::render_arrow(const GLCanvas3D& parent, EType highlighted_type) const
 {
-    const std::vector<size_t> selectable_idxs = get_selectable_idxs();
+    const std::vector<size_t> selectable_idxs = get_strip_idxs();
     if (selectable_idxs.empty())
         return;
     float cnv_w = (float)m_parent.get_canvas_size().get_width();
@@ -1266,7 +1273,7 @@ void GLGizmosManager::render_arrow(const GLCanvas3D& parent, EType highlighted_t
 // layout walk.
 void GLGizmosManager::do_render_overlay(bool draw_icons) const
 {
-    const std::vector<size_t> selectable_idxs = get_selectable_idxs();
+    const std::vector<size_t> selectable_idxs = get_strip_idxs();
     if (selectable_idxs.empty())
         return;
 
@@ -1378,7 +1385,10 @@ float GLGizmosManager::get_scaled_total_width() const
 {
 //BBS: GUI refactor: to support top layout
 #if BBS_TOOLBAR_ON_TOP
-    return m_layout.scale * (2.0f * m_layout.border + (float)get_selectable_idxs().size() * m_layout.stride_x() - m_layout.gap_x);
+    const size_t icons = get_strip_idxs().size();
+    if (icons == 0)
+        return 0.f;
+    return m_layout.scale * (2.0f * m_layout.border + (float)icons * m_layout.stride_x() - m_layout.gap_x);
 #else
     return 2.0f * m_layout.scaled_border() + m_layout.scaled_icons_size();
 #endif

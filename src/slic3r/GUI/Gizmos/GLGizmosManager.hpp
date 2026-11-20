@@ -146,6 +146,8 @@ private:
     GizmoObjectManipulation m_object_manipulation;
 
     std::vector<size_t> get_selectable_idxs() const;
+    // The gizmos the GL icon strip shows: none in the 3D view, where FotoSlicer's tool bar holds them.
+    std::vector<size_t> get_strip_idxs() const;
     EType get_gizmo_from_mouse(const Vec2d &mouse_pos) const;
 
     bool activate_gizmo(EType type);

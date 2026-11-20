@@ -23,6 +23,7 @@
 #include "I18N.hpp"
 #include "Plater.hpp"
 #include "format.hpp"
+#include "libslic3r/Preset.hpp"
 #include "libslic3r/PresetBundle.hpp"
 #include "Widgets/Button.hpp"
 #include "Widgets/Label.hpp"
@@ -82,9 +83,10 @@ public:
         wxString    name;
         int         percent{-1}; // -1: not known
         wxString    slot;        // "ACE slot A1", empty when not from the ACE
+        wxString    material;    // "PLA"
         bool operator==(const Row& other) const
         {
-            return colour == other.colour && name == other.name && percent == other.percent && slot == other.slot;
+            return colour == other.colour && name == other.name && percent == other.percent && slot == other.slot && material == other.material;
         }
     };
 
@@ -138,7 +140,8 @@ protected:
         dc.DrawText(row.name, text_x, rect.y + FromDIP(6));
         dc.SetTextForeground(dim_fg());
         dc.SetFont(Label::Body_12);
-        dc.DrawText(row.slot.IsEmpty() ? _L("Not synced with the ACE") : row.slot, text_x, rect.y + FromDIP(23));
+        // TRN %1% is a filament's material, such as PLA; %2% the ACE slot it is loaded in, such as A1.
+        dc.DrawText(row.slot.IsEmpty() ? row.material : format_wxstr(_L("%1% in ACE slot %2%"), row.material, row.slot), text_x, rect.y + FromDIP(23));
 
         // The amount left on the spool; "?" when the ACE cannot tell.
         const wxString amount = row.percent >= 0 ? wxString::Format("%d%%", row.percent) : row.slot.IsEmpty() ? wxString() : wxString("?");
@@ -167,6 +170,7 @@ class HistoryList : public PanelListBase
 public:
     explicit HistoryList(wxWindow* parent) : PanelListBase(parent, 26)
     {
+        SetItemCount(1); // the start
         Bind(wxEVT_LISTBOX, [this](wxCommandEvent& event) {
             const int row = event.GetSelection();
             SetSelection(wxNOT_FOUND);
@@ -251,7 +255,7 @@ FilamentPanel::FilamentPanel(wxWindow* parent) : wxPanel(parent, wxID_ANY, wxDef
     sizer->Add(header, 0, wxEXPAND | wxALL, FromDIP(8));
     m_list = new FilamentList(this);
     sizer->Add(m_list, 1, wxEXPAND);
-    auto* hint = new Label(this, _L("Select a part, then click a filament to print the part with it."));
+    auto* hint = new Label(this, _L("Select a part, then click a filament to print the part with it."), LB_AUTO_WRAP);
     hint->SetFont(Label::Body_12);
     hint->SetForegroundColour(dim_fg());
     sizer->Add(hint, 0, wxEXPAND | wxALL, FromDIP(8));
@@ -277,11 +281,13 @@ void FilamentPanel::on_idle()
         FilamentList::Row row;
         row.colour = colours[i];
         row.name   = i < bundle->filament_presets.size() ? short_name(bundle->filament_presets[i]) : wxString();
+        if (i < bundle->filament_presets.size())
+            if (const Preset* preset = bundle->filaments.find_preset(bundle->filament_presets[i]); preset != nullptr)
+                row.material = from_u8(preset->config.opt_string("filament_type", 0u));
         // The ACE spool this filament came from, while the filament still has that spool's colour.
         if (i < ace.size() && boost::iequals(ace[i].color, colours[i])) {
             row.percent = ace[i].percent_left;
-            // TRN %1% is a slot of the ACE unit, such as A1.
-            row.slot = format_wxstr(_L("ACE slot %1%"), std::string(1, char('A' + ace[i].box)) + std::to_string(ace[i].index + 1));
+            row.slot = from_u8(std::string(1, char('A' + ace[i].box)) + std::to_string(ace[i].index + 1));
         }
         rows.push_back(std::move(row));
     }
