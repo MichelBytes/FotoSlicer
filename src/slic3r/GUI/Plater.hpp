@@ -280,6 +280,8 @@ public:
     void                    update_searcher();
     void                    update_ui_from_settings();
 	bool                    show_object_list(bool show) const;
+    // FotoSlicer: puts the object list and its search bar in `parent`, the Layers panel, for good.
+    void move_object_list_to(wxWindow* parent);
     void                    finish_param_edit();
 
     /**

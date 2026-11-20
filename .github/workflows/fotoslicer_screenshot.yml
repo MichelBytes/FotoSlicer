@@ -85,6 +85,7 @@ jobs:
       - name: Run FotoSlicer and take screenshots
         shell: pwsh
         run: |
+          try { Set-DisplayResolution -Width 1920 -Height 1080 -Force -ErrorAction Stop } catch { "Resolution unchanged: $_" }
           Add-Type -AssemblyName System.Windows.Forms, System.Drawing
           $screen = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
           "Screen: $($screen.Width) x $($screen.Height)"

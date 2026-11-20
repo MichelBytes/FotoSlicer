@@ -1,6 +1,7 @@
 #include "AuiMgr.hpp"
 
 #include "GUI_App.hpp"
+#include "I18N.hpp"
 #ifdef __WXGTK__
 #include "LinuxDisplayBackend.hpp"
 #endif
@@ -37,19 +38,25 @@ void AuiMgr::init(wxWindow* window)
     if (is_running_on_wayland())
         SetFlags(GetFlags() & ~wxAUI_MGR_ALLOW_FLOATING);
 #endif
-    GetArtProvider()->SetMetric(wxAUI_DOCKART_CAPTION_SIZE, 18);
+    GetArtProvider()->SetMetric(wxAUI_DOCKART_CAPTION_SIZE, window->FromDIP(24));
     GetArtProvider()->SetMetric(wxAUI_DOCKART_GRADIENT_TYPE, wxAUI_GRADIENT_NONE);
     apply_color_mode();
 }
 
 void AuiMgr::apply_color_mode()
 {
-    const bool     is_dark    = wxGetApp().dark_mode();
-    const wxColour sash_color = is_dark ? wxColour(38, 46, 48) : wxColour(206, 206, 206);
-    GetArtProvider()->SetColour(wxAUI_DOCKART_INACTIVE_CAPTION_COLOUR, sash_color);
-    GetArtProvider()->SetColour(wxAUI_DOCKART_INACTIVE_CAPTION_TEXT_COLOUR, *wxWHITE);
+    // FotoSlicer: Photoshop's panel title bars, a shade darker than the panels, divided by near black.
+    const bool     is_dark       = wxGetApp().dark_mode();
+    const wxColour sash_color    = is_dark ? wxColour(24, 24, 24) : wxColour(206, 206, 206);
+    const wxColour caption_color = is_dark ? wxColour(40, 40, 40) : wxColour(232, 232, 232);
+    const wxColour caption_text  = is_dark ? wxColour(235, 235, 235) : wxColour(38, 46, 48);
+    GetArtProvider()->SetColour(wxAUI_DOCKART_INACTIVE_CAPTION_COLOUR, caption_color);
+    GetArtProvider()->SetColour(wxAUI_DOCKART_INACTIVE_CAPTION_TEXT_COLOUR, caption_text);
+    GetArtProvider()->SetColour(wxAUI_DOCKART_ACTIVE_CAPTION_COLOUR, caption_color);
+    GetArtProvider()->SetColour(wxAUI_DOCKART_ACTIVE_CAPTION_TEXT_COLOUR, caption_text);
     GetArtProvider()->SetColour(wxAUI_DOCKART_SASH_COLOUR, sash_color);
-    GetArtProvider()->SetColour(wxAUI_DOCKART_BORDER_COLOUR, is_dark ? *wxBLACK : wxColour(165, 165, 165));
+    GetArtProvider()->SetColour(wxAUI_DOCKART_BACKGROUND_COLOUR, sash_color);
+    GetArtProvider()->SetColour(wxAUI_DOCKART_BORDER_COLOUR, is_dark ? wxColour(20, 20, 20) : wxColour(165, 165, 165));
 }
 
 void AuiMgr::track_docked_size(wxWindow* window)
@@ -69,8 +76,10 @@ wxAuiPaneInfo AuiMgr::sidebar_pane_info()
 {
     return wxAuiPaneInfo()
         .Name("sidebar")
-        // FotoSlicer: on the right, where Photoshop keeps its panels.
+        // FotoSlicer: on the right, inside Photoshop's panels, as the print settings.
+        .Caption(_L("Print Settings"))
         .Right()
+        .Row(1)
         .CloseButton(false)
         .TopDockable(false)
         .BottomDockable(false)

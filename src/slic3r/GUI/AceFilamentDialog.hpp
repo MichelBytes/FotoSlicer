@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include <wx/string.h>
@@ -25,6 +26,10 @@ class AceFilamentDialog : public DPIDialog
 public:
     explicit AceFilamentDialog(wxWindow* parent);
     ~AceFilamentDialog() override;
+
+    // The spools last put in the filament list, in filament order, and the printer they came from.
+    static const std::vector<AnycubicLan::AceSlot>& used_slots();
+    static const std::string&                       used_model();
 
 protected:
     void on_dpi_changed(const wxRect& suggested_rect) override;

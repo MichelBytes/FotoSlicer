@@ -26,12 +26,14 @@ jobs:
       compiler: clang
     secrets: inherit
 
-  publish:
-    name: Publish the test release
+  # The installer goes to the download page by hand (FotoSlicer publish test build), once the
+  # screenshot shows the build is ready.
+  screenshot:
+    name: Screenshot
     needs: build_windows
     permissions:
       contents: write
       actions: read
-    uses: ./.github/workflows/fotoslicer_publish.yml
+    uses: ./.github/workflows/fotoslicer_screenshot.yml
     with:
       same_run: true

@@ -124,6 +124,7 @@ src/slic3r/GUI/ThermalPreconditioningDialog.hpp
 src/slic3r/GUI/Jobs/SLAImportJob.cpp
 src/slic3r/GUI/Jobs/UpgradeNetworkJob.cpp
 src/slic3r/GUI/AboutDialog.cpp
+src/slic3r/GUI/AuiMgr.cpp
 src/slic3r/GUI/AceFilamentDialog.cpp
 src/slic3r/GUI/ActionRegistry.cpp
 src/slic3r/GUI/AMSMaterialsSetting.cpp
@@ -195,6 +196,7 @@ src/slic3r/GUI/SendSystemInfoDialog.cpp
 src/slic3r/GUI/SendToPrinter.cpp
 src/slic3r/GUI/SlicingProgressNotification.cpp
 src/slic3r/GUI/BindDialog.cpp
+src/slic3r/GUI/PhotoshopPanels.cpp
 src/slic3r/GUI/Tab.cpp
 src/slic3r/GUI/ToolsPanel.cpp
 src/slic3r/GUI/Tab.hpp

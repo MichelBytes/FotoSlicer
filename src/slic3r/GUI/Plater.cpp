@@ -183,6 +183,7 @@
 #include "libslic3r/PresetBundle.hpp"
 #include "AceFilamentDialog.hpp"
 #include "ToolsPanel.hpp"
+#include "PhotoshopPanels.hpp"
 #include "libslic3r/IMEXHelpers.hpp"
 #include "libslic3r/PublishSettings.hpp"
 #include "libslic3r/TriangleMesh.hpp"
@@ -6934,6 +6935,12 @@ void Sidebar::update_ui_from_settings()
 
 bool Sidebar::show_object_list(bool show) const
 {
+    // FotoSlicer: the list lives in the Layers panel and stays shown there.
+    if (p->m_object_list->GetParent() != p->scrolled) {
+        if (show)
+            p->m_object_list->part_selection_changed();
+        return true;
+    }
     p->m_search_bar->Show(show);
     if (!p->m_object_list->Show(show))
         return false;
@@ -6943,6 +6950,22 @@ bool Sidebar::show_object_list(bool show) const
         p->m_object_list->part_selection_changed();
     p->scrolled->Layout();
     return true;
+}
+
+void Sidebar::move_object_list_to(wxWindow* parent)
+{
+    p->sizer_params->Detach(p->m_search_bar);
+    p->sizer_params->Detach(p->m_object_list);
+    p->m_search_bar->Reparent(parent);
+    p->m_object_list->Reparent(parent);
+    auto* sizer = new wxBoxSizer(wxVERTICAL);
+    sizer->Add(p->m_search_bar, 0, wxEXPAND);
+    sizer->Add(p->m_object_list, 1, wxEXPAND);
+    parent->SetSizer(sizer);
+    p->m_search_bar->Show();
+    p->m_object_list->Show();
+    parent->Layout();
+    p->scrolled->Layout();
 }
 
 void Sidebar::finish_param_edit() { p->editing_filament = -1; }
@@ -7233,6 +7256,9 @@ struct Plater::priv
     Plater *q;
     Sidebar *  sidebar;
     ToolsPanel* tools_panel{nullptr};
+    FilamentPanel* filament_panel{nullptr};
+    wxPanel*       layers_panel{nullptr};
+    HistoryPanel*  history_panel{nullptr};
     MainFrame *main_frame;
 
     MenuFactory menus;
@@ -8014,6 +8040,30 @@ Plater::priv::priv(Plater *q, MainFrame *main_frame)
     // Orca: Make sidebar dockable
     m_aui_mgr.AddPane(sidebar, AuiMgr::sidebar_pane_info());
 
+    // FotoSlicer: Photoshop's panels, stacked at the right edge: Filament, Layers, History. The
+    // sidebar, as Print Settings, docks inside them.
+    const auto panel_info = [q](const char* name, const wxString& caption, int position, int height) {
+        return wxAuiPaneInfo()
+            .Name(name)
+            .Caption(caption)
+            .Right()
+            .Row(0)
+            .Position(position)
+            .CloseButton(false)
+            .TopDockable(false)
+            .BottomDockable(false)
+            .MinSize(q->FromDIP(wxSize(220, 90)))
+            .BestSize(q->FromDIP(wxSize(290, height)));
+    };
+    filament_panel = new FilamentPanel(q);
+    m_aui_mgr.AddPane(filament_panel, panel_info("filament", _L("Filament"), 0, 250));
+    layers_panel = new wxPanel(q);
+    layers_panel->SetBackgroundColour(StateColor::darkModeColorFor(*wxWHITE));
+    sidebar->move_object_list_to(layers_panel);
+    m_aui_mgr.AddPane(layers_panel, panel_info("layers", _L("Layers"), 1, 560));
+    history_panel = new HistoryPanel(q);
+    m_aui_mgr.AddPane(history_panel, panel_info("history", _L("History"), 2, 220));
+
     // FotoSlicer: Photoshop's tool bar, left of the 3D view.
     tools_panel = new ToolsPanel(q);
     m_aui_mgr.AddPane(tools_panel, wxAuiPaneInfo()
@@ -8078,9 +8128,9 @@ Plater::priv::priv(Plater *q, MainFrame *main_frame)
         const auto cfg    = wxGetApp().app_config;
         wxString   layout = wxString::FromUTF8(cfg->get("window_layout"));
         // FotoSlicer moved the panels to Photoshop's places: a layout saved before that is dropped once.
-        if (cfg->get("fotoslicer_layout") != "1") {
+        if (cfg->get("fotoslicer_layout") != "2") {
             layout.clear();
-            cfg->set("fotoslicer_layout", "1");
+            cfg->set("fotoslicer_layout", "2");
         }
         if (!layout.empty()) {
             bool removed_floating_state = false;
@@ -22675,6 +22725,8 @@ void Plater::msw_rescale()
 
     p->sidebar->msw_rescale();
     p->tools_panel->msw_rescale();
+    p->filament_panel->msw_rescale();
+    p->history_panel->msw_rescale();
 
     p->menus.msw_rescale();
 
@@ -22687,6 +22739,9 @@ void Plater::sys_color_changed()
     p->preview->sys_color_changed();
     p->sidebar->sys_color_changed();
     p->tools_panel->sys_color_changed();
+    p->filament_panel->sys_color_changed();
+    p->history_panel->sys_color_changed();
+    p->layers_panel->SetBackgroundColour(StateColor::darkModeColorFor(*wxWHITE));
     p->menus.sys_color_changed();
     if (p->m_select_machine_dlg) p->m_select_machine_dlg->sys_color_changed();
 

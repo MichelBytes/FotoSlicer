@@ -40,6 +40,10 @@ namespace {
 
 constexpr const char* HOST_KEY = "anycubic_lan_host";
 
+std::vector<AnycubicLan::AceSlot> s_used_slots;
+std::string                       s_used_model;
+std::string                       s_read_model;
+
 // A spool's colour, drawn by hand so the dark theme never recolours it.
 class Swatch : public wxWindow
 {
@@ -177,6 +181,9 @@ AceFilamentDialog::AceFilamentDialog(wxWindow* parent)
 
 AceFilamentDialog::~AceFilamentDialog() { m_alive->store(false); }
 
+const std::vector<AnycubicLan::AceSlot>& AceFilamentDialog::used_slots() { return s_used_slots; }
+const std::string&                       AceFilamentDialog::used_model() { return s_used_model; }
+
 void AceFilamentDialog::start_reading()
 {
     std::string host = into_u8(m_host->GetTextCtrl()->GetValue());
@@ -203,6 +210,7 @@ void AceFilamentDialog::show_result(const AnycubicLan::Result& result, const wxS
 {
     m_read->Enable(true);
     m_slots = result.slots;
+    s_read_model = result.session.model_name;
     const wxString error = error_text(result.error, host);
     m_status->SetLabel(error.IsEmpty() ? from_u8(result.session.model_name) : error);
     m_status->Wrap(FromDIP(420));
@@ -245,9 +253,11 @@ void AceFilamentDialog::show_slots()
 void AceFilamentDialog::apply()
 {
     std::map<int, DynamicPrintConfig> trays;
+    std::vector<AnycubicLan::AceSlot> used;
     for (const auto& slot : m_slots) {
         if (slot.material.empty())
             continue;
+        used.push_back(slot);
         DynamicPrintConfig tray;
         tray.set_key_value("filament_id", new ConfigOptionStrings{filament_id_for(slot.material)});
         tray.set_key_value("filament_type", new ConfigOptionStrings{slot.material});
@@ -268,6 +278,8 @@ void AceFilamentDialog::apply()
         MessageDialog(this, _L("There are no compatible filaments, and sync is not performed."), _L("ACE Filament"), wxOK).ShowModal();
         return;
     }
+    s_used_slots = std::move(used);
+    s_used_model = s_read_model;
     if (!unmatched.IsEmpty())
         MessageDialog(this, _L("There are some unknown or incompatible filaments mapped to generic preset.") + unmatched, _L("ACE Filament"), wxOK)
             .ShowModal();
