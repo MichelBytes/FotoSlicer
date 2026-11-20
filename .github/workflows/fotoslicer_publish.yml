@@ -1,0 +1,58 @@
+name: FotoSlicer publish test build
+
+# Copies the newest successful "FotoSlicer Windows build" of the fotoslicer branch to the
+# "fotoslicer-test" release, so the installer is a plain download link instead of a workflow
+# artifact (which needs a GitHub sign-in and is hard to find). Run it from the Actions tab, or
+# push to the fotoslicer-publish branch.
+on:
+  push:
+    branches:
+      - fotoslicer-publish
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: fotoslicer-test
+    steps:
+      - name: Find the newest successful Windows build
+        id: run
+        run: |
+          run=$(gh run list --workflow fotoslicer_windows.yml --branch fotoslicer --status success --limit 1 --json databaseId,headSha --jq '.[0]')
+          test -n "$run" || { echo "No successful Windows build yet"; exit 1; }
+          echo "id=$(jq -r .databaseId <<<"$run")" >> "$GITHUB_OUTPUT"
+          echo "sha=$(jq -r .headSha <<<"$run")" >> "$GITHUB_OUTPUT"
+
+      - name: Download the installer and the portable app
+        run: |
+          gh run download "${{ steps.run.outputs.id }}" --pattern 'OrcaSlicer_Windows_V*' --dir dl
+          mkdir out
+          installer=$(find dl -path '*_x64/*' -name 'OrcaSlicer*Installer*.exe' | head -1)
+          test -n "$installer"
+          cp "$installer" out/FotoSlicer_Setup_Windows_x64.exe
+          portable=$(find dl -maxdepth 1 -type d -name '*_portable' | head -1)
+          test -n "$portable"
+          mv "$portable" dl/FotoSlicer
+          (cd dl && zip -qr ../out/FotoSlicer_Portable_Windows_x64.zip FotoSlicer)
+          ls -la out
+
+      - name: Replace the test release
+        run: |
+          gh release delete "$TAG" --yes --cleanup-tag || true
+          sha="${{ steps.run.outputs.sha }}"
+          cat > notes.md <<EOF
+          Test build of FotoSlicer for Windows, from commit ${sha:0:8}.
+
+          - **FotoSlicer_Setup_Windows_x64.exe**: the installer. Windows warns that the app is not signed: click **More info**, then **Run anyway**.
+          - **FotoSlicer_Portable_Windows_x64.zip**: no install. Unzip it and run \`orca-slicer.exe\` in the FotoSlicer folder.
+
+          FotoSlicer keeps its own settings and installs next to Anycubic Slicer Next and OrcaSlicer without touching them.
+          EOF
+          gh release create "$TAG" out/* --target "$sha" --prerelease --title "FotoSlicer test build ($(date -u +%Y-%m-%d))" --notes-file notes.md
