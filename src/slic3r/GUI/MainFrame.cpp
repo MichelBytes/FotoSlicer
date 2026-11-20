@@ -7,6 +7,7 @@
 #include "libslic3r/Utils.hpp"
 #include "slic3r/GUI/GUI_Utils.hpp"
 #include <wx/filehistory.h>
+#include <wx/glcanvas.h>
 #include "slic3r/GUI/BBLTopbar.hpp"
 #include "libslic3r/Format/bbs_3mf.hpp"
 #include <boost/lexical_cast.hpp>
