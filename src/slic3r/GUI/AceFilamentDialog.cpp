@@ -115,7 +115,8 @@ std::string filament_id_for(const std::string& material)
     for (const Preset& preset : filaments) {
         if (!preset.is_compatible || !preset.is_system || preset.filament_id.empty() || filaments.get_preset_base(preset) != &preset)
             continue;
-        const bool same_type = boost::iequals(preset.config.opt_string("filament_type", 0u), material);
+        const auto* type      = preset.config.option<ConfigOptionStrings>("filament_type");
+        const bool  same_type = type != nullptr && !type->values.empty() && boost::iequals(type->values.front(), material);
         const int  rank      = boost::istarts_with(preset.name, "Anycubic " + material + " @")       ? 3 :
                                same_type && boost::starts_with(preset.name, "Anycubic ")           ? 2 :
                                same_type && boost::starts_with(preset.name, "Generic ")            ? 1 : 0;

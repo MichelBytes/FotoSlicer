@@ -133,7 +133,8 @@ protected:
         const int radius = FromDIP(11);
         const wxPoint centre(rect.x + pad + FromDIP(18) + radius, rect.y + rect.height / 2 - FromDIP(2));
         dc.SetPen(wxPen(wxGetApp().dark_mode() ? wxColour(90, 90, 90) : wxColour(200, 200, 200)));
-        dc.SetBrush(wxBrush(wxColour(row.colour)));
+        const wxColour colour(row.colour);
+        dc.SetBrush(colour.IsOk() ? wxBrush(colour) : *wxTRANSPARENT_BRUSH);
         dc.DrawCircle(centre, radius);
 
         const int text_x = centre.x + radius + FromDIP(10);
@@ -178,10 +179,21 @@ public:
             if (row < 0)
                 return;
             // Row 0 is the start; rows 1..done are the steps done, oldest first; then the steps undone.
-            const int done = m_done;
-            wxGetApp().CallAfter([row, done]() {
+            const int done  = m_done;
+            const int total = int(m_done_names.size() + m_undone_names.size());
+            wxGetApp().CallAfter([row, done, total]() {
                 Plater* plater = wxGetApp().plater();
                 if (plater == nullptr)
+                    return;
+                // The history may have changed since the click was queued: then the row means
+                // another step, so the click is dropped.
+                int         done_now = 0, undone_now = 0;
+                const char* text     = nullptr;
+                while (plater->undo_redo_string_getter(true, done_now, &text))
+                    ++done_now;
+                while (plater->undo_redo_string_getter(false, undone_now, &text))
+                    ++undone_now;
+                if (done_now != done || done_now + undone_now != total || row < 0 || row > total)
                     return;
                 if (row <= done) {
                     const int steps_back = done - row; // back to the state right after step `row`
@@ -283,7 +295,8 @@ void FilamentPanel::refresh()
         row.name   = i < bundle->filament_presets.size() ? short_name(bundle->filament_presets[i]) : wxString();
         if (i < bundle->filament_presets.size())
             if (const Preset* preset = bundle->filaments.find_preset(bundle->filament_presets[i]); preset != nullptr)
-                row.material = from_u8(preset->config.opt_string("filament_type", 0u));
+                if (const auto* type = preset->config.option<ConfigOptionStrings>("filament_type"); type != nullptr && !type->values.empty())
+                    row.material = from_u8(type->values.front());
         // The ACE spool this filament came from, while the filament still has that spool's colour.
         if (i < ace.size() && boost::iequals(ace[i].color, colours[i])) {
             row.percent = ace[i].percent_left;
