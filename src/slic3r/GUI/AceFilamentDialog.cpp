@@ -265,8 +265,9 @@ void AceFilamentDialog::apply()
         tray.set_key_value("filament_colour_type", new ConfigOptionStrings{"0"});
         tray.set_key_value("filament_exist", new ConfigOptionBools{true});
         tray.set_key_value("filament_is_support", new ConfigOptionBools{false});
-        // The same keys build_filament_ams_list gives the printer's main extruder.
-        trays.emplace(0x10000 + slot.box * 4 + slot.index, std::move(tray));
+        // Keyed like build_filament_ams_list's trays on the main extruder, in unit then slot
+        // order, so every unit's slots follow on: a second ACE gives filaments 5 to 8.
+        trays.emplace(0x10000 + slot.box * 0x100 + slot.index, std::move(tray));
     }
     wxString unmatched;
     if (wxGetApp().plater()->sidebar().load_filament_trays(std::move(trays), unmatched) == 0) {

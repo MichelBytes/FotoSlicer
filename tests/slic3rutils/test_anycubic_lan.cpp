@@ -56,6 +56,27 @@ TEST_CASE("Anycubic LAN handshake reports cloud mode", "[AnycubicLan]")
     CHECK(urls.size() == 1);
 }
 
+TEST_CASE("Two ACE units give eight slots in order", "[AnycubicLan]")
+{
+    // A Kobra 4 Combo takes a second ACE 2 Pro: the report lists each unit with its own slots.
+    std::string boxes;
+    for (int box : {1, 0}) {
+        std::string slots;
+        for (int index : {3, 2, 1, 0})
+            slots += std::string(slots.empty() ? "" : ",") + R"({"index":)" + std::to_string(index) +
+                     R"(,"sku":"AHPLA-1","type":"PLA","color":[)" + std::to_string(box * 100 + index) + R"(,0,0],"status":5,"consumables_percent":50})";
+        boxes += std::string(boxes.empty() ? "" : ",") + R"({"id":)" + std::to_string(box) + R"(,"status":1,"slots":[)" + slots + "]}";
+    }
+    std::vector<AceSlot> slots;
+    REQUIRE(parse_multicolorbox(R"({"multi_color_box":[)" + boxes + R"(,{"feed_status":{"current_status":0}}]})", slots));
+    REQUIRE(slots.size() == 8);
+    for (int i = 0; i < 8; ++i) {
+        CHECK(slots[i].box == i / 4);
+        CHECK(slots[i].index == i % 4);
+    }
+    CHECK(slots[7].color == "#670000"); // unit 2, slot 4: red 103
+}
+
 TEST_CASE("ACE slots are read from a multiColorBox report", "[AnycubicLan]")
 {
     std::vector<AceSlot> slots;
