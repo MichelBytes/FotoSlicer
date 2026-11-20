@@ -226,6 +226,10 @@ public:
     void load_ams_list(MachineObject* obj);
     std::map<int, DynamicPrintConfig> build_filament_ams_list(MachineObject* obj);
     void sync_ams_list(bool is_from_big_sync_btn = false);
+    // Sets the filament list from trays read from a printer the device page does not manage
+    // (an Anycubic ACE read over the LAN). Each tray is a config as build_filament_ams_list makes
+    // it. Returns how many filaments were set; `unmatched` lists trays mapped to a generic preset.
+    unsigned int load_filament_trays(std::map<int, DynamicPrintConfig> trays, wxString& unmatched);
     bool sync_extruder_list();
     bool is_fila_switch_ready();
     void reset_fila_switch();

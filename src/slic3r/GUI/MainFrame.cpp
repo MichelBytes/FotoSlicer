@@ -95,6 +95,7 @@
 #include "I18N.hpp"
 #include "GLCanvas3D.hpp"
 #include "Plater.hpp"
+#include "AceFilamentDialog.hpp"
 #ifdef SLIC3R_CAD
 #include "slic3r/GUI/CAD/DesignPanel.hpp"
 #include "slic3r/GUI/CAD/McpControl.hpp"
@@ -3177,6 +3178,8 @@ MainFrame::PhotoshopMenus MainFrame::create_photoshop_menus()
         [this](wxCommandEvent&) { run_global_shortcut(Shortcut::ExportSlicedFile); }, "", nullptr, [this]() { return can_export_gcode(); }, this);
     append_shortcut_item(ps.slice, Shortcut::PrintHostQueue, false, _L("Upload Queue"), _L("Show the files waiting to be sent to printers"),
         [this](wxCommandEvent&) { run_global_shortcut(Shortcut::PrintHostQueue); }, "", nullptr, []() { return true; }, this);
+    append_menu_item(ps.slice, wxID_ANY, _L("ACE Filament..."), _L("Read the spools in the ACE unit and use them as the filament list"),
+        [this](wxCommandEvent&) { AceFilamentDialog dlg(this); dlg.ShowModal(); }, "", nullptr, []() { return true; }, this);
     ps.slice->AppendSeparator();
     append_shortcut_item(ps.slice, Shortcut::GoToPreview, false, _L("Preview Layers"), _L("Show the sliced layers"),
         [this](wxCommandEvent&) { run_global_shortcut(Shortcut::GoToPreview); }, "", nullptr, []() { return true; }, this);

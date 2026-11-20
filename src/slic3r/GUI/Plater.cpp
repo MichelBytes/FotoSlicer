@@ -181,6 +181,7 @@
 #include "libslic3r/SLAPrint.hpp"
 #include "libslic3r/Utils.hpp"
 #include "libslic3r/PresetBundle.hpp"
+#include "AceFilamentDialog.hpp"
 #include "libslic3r/IMEXHelpers.hpp"
 #include "libslic3r/PublishSettings.hpp"
 #include "libslic3r/TriangleMesh.hpp"
@@ -3374,6 +3375,13 @@ Sidebar::Sidebar(Plater *parent)
                                                  wxBU_EXACTFIT | wxNO_BORDER, false, 16); // ORCA match icon size with other icons as 16x16
     ams_btn->SetToolTip(_L("Synchronize filament list from AMS"));
     ams_btn->Bind(wxEVT_BUTTON, [this](wxCommandEvent &e) {
+        // An Anycubic printer is not on the device page: its ACE unit is read over the LAN.
+        DeviceManager* devices = wxGetApp().getDeviceManager();
+        if ((devices == nullptr || devices->get_selected_machine() == nullptr) && AceFilamentDialog::is_for_selected_printer()) {
+            AceFilamentDialog dlg(this);
+            dlg.ShowModal();
+            return;
+        }
         sync_ams_list();
     });
 
@@ -6238,6 +6246,35 @@ void Sidebar::get_big_btn_sync_pos_size(wxPoint &pt, wxSize &size)
 void Sidebar::get_small_btn_sync_pos_size(wxPoint &pt, wxSize &size) {
     size = ams_btn->GetSize();
     pt   = ams_btn->GetScreenPosition();
+}
+
+unsigned int Sidebar::load_filament_trays(std::map<int, DynamicPrintConfig> trays, wxString& unmatched)
+{
+    PresetBundle& bundle = *wxGetApp().preset_bundle;
+    bundle.filament_ams_list = std::move(trays);
+    std::vector<std::pair<DynamicPrintConfig *, std::string>> unknowns;
+    std::map<int, AMSMapInfo> maps;
+    MergeFilamentInfo merge_info;
+    const unsigned int n = bundle.sync_ams_list(unknowns, false, maps, false, merge_info, false);
+    if (n == 0)
+        return 0;
+    for (const auto &unknown : unknowns)
+        unmatched += from_u8("\n- " + unknown.first->opt_string("tray_name", 0u) + " (" + unknown.first->opt_string("filament_type", 0u) + ") ") + _L(unknown.second);
+
+    // The same steps as the end of a full sync_ams_list().
+    wxGetApp().plater()->on_filament_count_change(n);
+    for (auto &c : p->combos_filament)
+        c->update();
+    update_filaments_area_height();
+    if (wxGetApp().app_config->get("auto_calculate_flush") != "disabled")
+        for (int i = 0; i < int(p->combos_filament.size()); ++i)
+            auto_calc_flushing_volumes(i);
+    Layout();
+    bundle.install_slot_filaments(*wxGetApp().app_config);
+    wxGetApp().get_tab(Preset::TYPE_FILAMENT)->select_preset(bundle.filament_presets[0]);
+    bundle.export_selections(*wxGetApp().app_config);
+    update_dynamic_filament_list();
+    return n;
 }
 
 void Sidebar::load_ams_list(MachineObject* obj)

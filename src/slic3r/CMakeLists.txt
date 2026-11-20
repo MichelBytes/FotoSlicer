@@ -21,6 +21,8 @@ set(SLIC3R_GUI_SOURCES
     GUI/AboutDialog.cpp
     GUI/Branding.hpp
     GUI/AboutDialog.hpp
+    GUI/AceFilamentDialog.cpp
+    GUI/AceFilamentDialog.hpp
     GUI/AnimatedTexture.cpp
     GUI/AnimatedTexture.hpp
     GUI/AmsMappingPopup.cpp
@@ -777,6 +779,8 @@ set(SLIC3R_GUI_SOURCES
     Utils/FlashAir.hpp
     Utils/Flashforge.cpp
     Utils/Flashforge.hpp
+    Utils/AnycubicLan.cpp
+    Utils/AnycubicLan.hpp
     Utils/FontConfigHelp.cpp
     Utils/FontConfigHelp.hpp
     Utils/HexFile.cpp
