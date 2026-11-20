@@ -365,8 +365,14 @@ wxBitmap* BitmapCache::load_svg(const std::string &bitmap_name, unsigned target_
     if (strstr(bitmap_name.c_str(), "toggle_on") != NULL && dark_mode) // ORCA only replace color of toggle button
         replaces["#009688"] = "#2F6FD6";
 
-    if (!new_color.empty())
+    if (!new_color.empty()) {
         replaces["\"#009688\""] = "\"" + new_color + "\"";
+        // FotoSlicer: icons coloured through a style (the 3D tools' "fill:#009688"), and the accent
+        // blue they may already have been given above, take the requested colour too.
+        for (const char* property : {"fill:", "stroke:"})
+            for (const char* colour : {"#009688", "#2F6FD6"})
+                replaces[std::string(property) + colour] = property + new_color;
+    }
 
      NSVGimage *image = nullptr;
     if (strstr(bitmap_name.c_str(), "printer_thumbnail") == NULL) {

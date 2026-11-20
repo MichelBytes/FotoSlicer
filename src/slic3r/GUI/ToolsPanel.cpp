@@ -33,7 +33,7 @@ namespace GUI {
 
 namespace {
 
-constexpr int TOOL_ICON_PX = 22;
+constexpr int TOOL_ICON_PX = 26;
 
 wxColour panel_colour() { return StateColor::darkModeColorFor(wxColour("#F8F8F8")); }
 wxColour hover_colour() { return StateColor::darkModeColorFor(wxColour("#E4E4E4")); }
@@ -82,7 +82,7 @@ class ToolButton : public wxWindow
 {
 public:
     ToolButton(wxWindow* parent, const ToolInfo& tool)
-        : wxWindow(parent, wxID_ANY, wxDefaultPosition, parent->FromDIP(wxSize(36, 32)), wxBORDER_NONE), m_tool(tool)
+        : wxWindow(parent, wxID_ANY, wxDefaultPosition, parent->FromDIP(wxSize(40, 36)), wxBORDER_NONE), m_tool(tool)
     {
         SetBackgroundStyle(wxBG_STYLE_PAINT);
         SetMinSize(GetSize());
@@ -122,8 +122,9 @@ public:
 
     void load_icon()
     {
-        m_icon = ScalableBitmap(this, m_tool.icon, TOOL_ICON_PX);
-        SetMinSize(FromDIP(wxSize(36, 32)));
+        // Photoshop's tool icons are light grey on the dark panel; the 3D tools' own are accent coloured.
+        m_icon = create_scaled_bitmap(m_tool.icon, this, TOOL_ICON_PX, false, wxGetApp().dark_mode() ? "#D4D4D4" : "#3C3C3C");
+        SetMinSize(FromDIP(wxSize(40, 36)));
         Refresh();
     }
 
@@ -138,7 +139,7 @@ private:
             dc.SetBrush(wxBrush(m_active ? active_colour() : hover_colour()));
             dc.DrawRoundedRectangle(wxRect(GetClientSize()).Deflate(FromDIP(2)), FromDIP(4));
         }
-        const wxBitmap& icon = m_icon.bmp();
+        const wxBitmap& icon = m_icon;
         if (icon.IsOk()) {
             const wxSize size = icon.GetLogicalSize();
             dc.DrawBitmap(icon, (GetClientSize().x - size.x) / 2, (GetClientSize().y - size.y) / 2, true);
@@ -146,7 +147,7 @@ private:
     }
 
     ToolInfo       m_tool;
-    ScalableBitmap m_icon;
+    wxBitmap       m_icon;
     bool           m_hover{false};
     bool           m_active{false};
 };
