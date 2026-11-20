@@ -109,6 +109,18 @@ jobs:
           $p.Refresh()
           if ($p.MainWindowHandle -ne 0) { [W]::ShowWindow($p.MainWindowHandle, 3) | Out-Null; [W]::SetForegroundWindow($p.MainWindowHandle) | Out-Null }
           Start-Sleep 20; Shot 2
+          # Open tools from the tool bar, as a user would: the Type tool (once crashed on opening),
+          # then the Move tool. Their panels must show, and the app must still be running.
+          Add-Type @"
+          using System; using System.Runtime.InteropServices;
+          public static class M { [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
+                                  [DllImport("user32.dll")] public static extern void mouse_event(uint f, uint x, uint y, uint d, IntPtr e); }
+          "@
+          function Click($x, $y) { [M]::SetCursorPos($x, $y) | Out-Null; [M]::mouse_event(2, 0, 0, 0, [IntPtr]::Zero); Start-Sleep -Milliseconds 80; [M]::mouse_event(4, 0, 0, 0, [IntPtr]::Zero) }
+          Click 24 746; Start-Sleep 10; Shot 3
+          "After Type tool: running=$(-not $p.HasExited)"
+          Click 24 284; Start-Sleep 6; Shot 4
+          "After Move tool: running=$(-not $p.HasExited)"
           "Running: $(-not $p.HasExited)"
           if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }
           Get-ChildItem "$env:DATA\log" -ErrorAction SilentlyContinue | Select-Object -Last 1 | ForEach-Object { Get-Content $_.FullName -Tail 40 }
