@@ -82,6 +82,14 @@ jobs:
           $stl += "endsolid cube`n"
           Set-Content -Encoding ascii "$env:RUNNER_TEMP\Cube.stl" $stl
 
+      - name: Check the Printables search API
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $q = 'query S($query: String!) { result: searchPrints2(query: $query, limit: 3, offset: 0, ordering: best_match, printType: print) { items { id name likesCount downloadCount } } }'
+          $body = @{ query = $q; variables = @{ query = 'whistle' } } | ConvertTo-Json -Depth 5
+          (Invoke-RestMethod -Method Post -Uri https://api.printables.com/graphql/ -ContentType 'application/json' -Body $body) | ConvertTo-Json -Depth 6
+
       - name: Run FotoSlicer and take screenshots
         shell: pwsh
         run: |
@@ -124,6 +132,10 @@ jobs:
           # The Models tab, right of Project in the tab row: the model sites in the built-in browser.
           Click 655 52; Start-Sleep 20; Shot 5
           "After Models tab: running=$(-not $p.HasExited)"
+          # Search All: type a query in the search box at the left of the Models bar.
+          Click 120 94; Start-Sleep 1
+          [System.Windows.Forms.SendKeys]::SendWait("whistle{ENTER}"); Start-Sleep 75; Shot 6
+          "After Search All: running=$(-not $p.HasExited)"
           "Running: $(-not $p.HasExited)"
           if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }
           Get-ChildItem "$env:DATA\log" -ErrorAction SilentlyContinue | Select-Object -Last 1 | ForEach-Object { Get-Content $_.FullName -Tail 40 }
