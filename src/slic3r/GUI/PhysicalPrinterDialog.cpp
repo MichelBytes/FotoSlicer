@@ -50,6 +50,7 @@
 
 #include "GUI.hpp"
 #include "GUI_App.hpp"
+#include "libslic3r/AppConfig.hpp"
 #include "MainFrame.hpp"
 #include "Tab.hpp"
 #include "libslic3r_version.h"
@@ -696,7 +697,22 @@ void PhysicalPrinterDialog::update(bool printer_change)
                 }
                 m_optgroup->hide_field("print_host_webui");
                 m_optgroup->hide_field("printhost_apikey");
-            } 
+            } else if (opt->value == htAnycubicLan) {
+                // The printer hands out its own credentials over the LAN: only its address is
+                // asked for, filled in from the ACE sync when that already knows it.
+                if (Field* printhost_field = m_optgroup->get_field("print_host"); printhost_field) {
+                    const std::string known = wxGetApp().app_config->get("anycubic_lan_host");
+                    if (wxTextCtrl* temp = dynamic_cast<TextCtrl*>(printhost_field)->text_ctrl(); temp && temp->GetValue().IsEmpty() && !known.empty()) {
+                        temp->SetValue(from_u8(known));
+                        m_config->opt_string("print_host") = known;
+                    }
+                }
+                m_optgroup->hide_field("printhost_apikey");
+                m_optgroup->disable_field("printhost_cafile");
+                m_optgroup->disable_field("printhost_ssl_ignore_revoke");
+                if (m_printhost_cafile_browse_btn)
+                    m_printhost_cafile_browse_btn->Disable();
+            }
         }
         
         if (opt->value == htFlashforge) {

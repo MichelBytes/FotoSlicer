@@ -75,6 +75,59 @@ bool parse_multicolorbox(const std::string& data_json, std::vector<AceSlot>& slo
 // The handshake alone: GET /info, signed POST, decrypt. Blocking.
 Result handshake(const std::string& host, const Fetch& fetch);
 
+// Where the printer takes uploads: its own path and query (which carries an upload token), on
+// `host`. Error::CloudMode when the printer is not in LAN Mode. Blocking.
+Error upload_address(const std::string& host, const Fetch& fetch, std::string& url);
+
+// The name to send a G-code file under: the base name, every character outside A-Z, a-z, 0-9,
+// space and ._()+- made "_", ending in ".gcode", at most 100 characters.
+std::string printer_file_name(const std::string& name);
+
+// Reads the printer's answer to an upload. True with `stored` the name the printer kept the
+// file under (`sent` when it does not say plainly); false with `code` the printer's error code,
+// or 0 when the answer is not one.
+bool read_upload_answer(const std::string& body, const std::string& sent, std::string& stored, int& code);
+
+// A G-code file already uploaded to the printer, and how its filaments map to the ACE.
+struct PrintJob
+{
+    std::string file_name; // the name the printer stored it under
+    long long   file_size{0};
+    std::string md5;          // of the file, lowercase hex
+    std::string ams_settings; // JSON: {"use_ams": bool, "ams_box_mapping": [...]}
+};
+
+// What a G-code file says about its filaments, by filament number from 0.
+struct FileFilaments
+{
+    std::vector<std::string> materials; // "PLA", ...; empty where the file does not say
+    std::vector<std::string> colors;    // "#RRGGBB"; empty where the file does not say
+    std::vector<int>         used;      // the filaments the file prints with
+};
+
+// Reads the "; key = value" comments a slicer writes at the start and end of a G-code file:
+// filament_type, filament_colour and the filament used by each. `tail` is the file's last bytes,
+// starting partway through a line, or empty when `head` is the whole file.
+FileFilaments file_filaments(const std::string& head, const std::string& tail);
+
+// The "ams_settings" of a print start: each filament the file prints with, on the ACE slot that
+// holds its material, the same colour first. Only the printer's own unit (the lowest box) feeds
+// a print. `missing` is the filament, from 0, with no loaded spool of its material, and
+// `settings` is empty then.
+struct FilamentMap
+{
+    std::string settings;
+    int         missing{-1};
+};
+FilamentMap map_filaments(const FileFilaments& file, const std::vector<AceSlot>& slots);
+
+// The settings of a print from the printer's own spool holder, without the ACE.
+std::string no_ace_settings();
+
+// Starts printing an uploaded file: the handshake, then "print"/"start" on the printer's broker.
+// `answer` gets the printer's refusal message, if it sends one. Blocking.
+Result start_print(const std::string& host, const Fetch& fetch, const PrintJob& job, std::string& answer, int timeout_ms = 15000);
+
 // The handshake, then the ACE query on the printer's broker. Blocking for up to
 // `timeout_ms` after the handshake: call it from a worker thread.
 Result read_ace(const std::string& host, const Fetch& fetch, int timeout_ms = 15000);

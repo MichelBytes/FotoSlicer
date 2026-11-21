@@ -4,7 +4,11 @@
 #include <chrono>
 #include <cctype>
 #include <cstddef>
+#include <cmath>
 #include <cstdint>
+#include <cstdlib>
+#include <cstring>
+#include <map>
 #include <random>
 #include <regex>
 #include <string>
@@ -285,6 +289,90 @@ private:
     std::chrono::steady_clock::time_point          m_deadline;
 };
 
+// Connects to the printer's broker with the session's credentials and subscribes to the
+// printer's reports. False, with `result.error` set, when that fails.
+bool open_broker(BrokerLink& link, const std::string& host, Result& result)
+{
+    const Session& session = result.session;
+    // The broker runs on the printer, so it is reached at the address the user entered.
+    if (!link.connect(host, session.broker_port)) {
+        result.error  = Error::Unreachable;
+        result.detail = "broker";
+        return false;
+    }
+    std::string connect;
+    put_text(connect, "MQTT");
+    connect += char(4);    // protocol level 3.1.1
+    connect += char(0xC2); // user name, password, clean session
+    put_u16(connect, 60);  // keep-alive, seconds
+    put_text(connect, "fotoslicer-" + random_text(8, "0123456789abcdef"));
+    put_text(connect, session.username);
+    put_text(connect, session.password);
+    std::uint8_t header = 0;
+    std::string  body;
+    if (!link.write(packet(0x10, connect)) || !link.read_packet(header, body)) {
+        result.error = Error::NoAnswer;
+        return false;
+    }
+    if ((header & 0xF0) != 0x20 || body.size() < 2 || body[1] != 0) {
+        result.error = Error::BrokerRefused;
+        return false;
+    }
+    std::string subscribe;
+    put_u16(subscribe, 1);
+    put_text(subscribe, std::string(TOPIC_PREFIX) + "/printer/public/" + session.model_id + "/" + session.device_id + "/#");
+    subscribe += char(0);
+    if (!link.write(packet(0x82, subscribe))) {
+        result.error = Error::NoAnswer;
+        return false;
+    }
+    // Wait for the subscription, so the answer to what is sent next cannot be missed.
+    while (link.read_packet(header, body)) {
+        if ((header & 0xF0) != 0x90)
+            continue;
+        if (body.size() < 3 || std::uint8_t(body[2]) == 0x80) {
+            result.error = Error::BrokerRefused;
+            return false;
+        }
+        return true;
+    }
+    result.error = Error::NoAnswer;
+    return false;
+}
+
+// Sends one PUBLISH, QoS 0, to the printer's command topic for `type`.
+bool publish(BrokerLink& link, const Session& session, const std::string& type, const std::string& payload)
+{
+    std::string publish;
+    put_text(publish, std::string(TOPIC_PREFIX) + "/web/printer/" + session.model_id + "/" + session.device_id + "/" + type);
+    publish += payload;
+    return link.write(packet(0x30, publish));
+}
+
+// Reads the next PUBLISH: its topic and payload. Acknowledges QoS 1. False when the link ends.
+bool next_report(BrokerLink& link, std::string& topic, std::string& payload)
+{
+    std::uint8_t header = 0;
+    std::string  body;
+    while (link.read_packet(header, body)) {
+        if ((header & 0xF0) != 0x30 || body.size() < 2)
+            continue;
+        const std::size_t topic_length = (std::size_t(std::uint8_t(body[0])) << 8) | std::uint8_t(body[1]);
+        const int         qos          = (header >> 1) & 3;
+        const std::size_t offset       = 2 + topic_length + (qos > 0 ? 2 : 0);
+        if (offset > body.size())
+            continue;
+        if (qos == 1)
+            link.write(packet(0x40, body.substr(2 + topic_length, 2)));
+        topic   = body.substr(2, topic_length);
+        payload = body.substr(offset);
+        return true;
+    }
+    return false;
+}
+
+long long now_ms() { return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count(); }
+
 Result failed(Result result, Error error, std::string detail = {})
 {
     result.error  = error;
@@ -386,72 +474,16 @@ Result read_ace(const std::string& host, const Fetch& fetch, int timeout_ms)
     Result result = handshake(host, fetch);
     if (result.error != Error::None)
         return result;
-    const Session& session = result.session;
-
-    // The broker runs on the printer, so it is reached at the address the user entered, for
-    // the same reason as the signed request.
     BrokerLink link(std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms));
-    if (!link.connect(host, session.broker_port))
-        return failed(result, Error::Unreachable, "broker");
-
-    std::string connect;
-    put_text(connect, "MQTT");
-    connect += char(4);    // protocol level 3.1.1
-    connect += char(0xC2); // user name, password, clean session
-    put_u16(connect, 60);  // keep-alive, seconds
-    put_text(connect, "fotoslicer-" + random_text(8, "0123456789abcdef"));
-    put_text(connect, session.username);
-    put_text(connect, session.password);
-    std::uint8_t header = 0;
-    std::string  body;
-    if (!link.write(packet(0x10, connect)) || !link.read_packet(header, body))
+    if (!open_broker(link, host, result))
+        return result;
+    const json query = {{"type", "multiColorBox"}, {"action", "getInfo"}, {"timestamp", now_ms()},
+                        {"msgid", random_text(32, "0123456789abcdef")}, {"data", nullptr}};
+    if (!publish(link, result.session, "multiColorBox", query.dump()))
         return failed(result, Error::NoAnswer);
-    if ((header & 0xF0) != 0x20 || body.size() < 2 || body[1] != 0)
-        return failed(result, Error::BrokerRefused);
-
-    const std::string device = session.model_id + "/" + session.device_id;
-    std::string       subscribe;
-    put_u16(subscribe, 1);
-    put_text(subscribe, std::string(TOPIC_PREFIX) + "/printer/public/" + device + "/#");
-    subscribe += char(0);
-    if (!link.write(packet(0x82, subscribe)))
-        return failed(result, Error::NoAnswer);
-
-    const json query = {{"type", "multiColorBox"},
-                        {"action", "getInfo"},
-                        {"timestamp", std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count()},
-                        {"msgid", random_text(32, "0123456789abcdef")},
-                        {"data", nullptr}};
-    std::string publish;
-    put_text(publish, std::string(TOPIC_PREFIX) + "/web/printer/" + device + "/multiColorBox");
-    publish += query.dump();
-
-    bool asked = false;
-    while (link.read_packet(header, body)) {
-        const std::uint8_t kind = header & 0xF0;
-        if (kind == 0x90 && !asked) { // SUBACK: ask once the reports can arrive
-            if (body.size() < 3 || std::uint8_t(body[2]) == 0x80)
-                return failed(result, Error::BrokerRefused);
-            if (!link.write(packet(0x30, publish)))
-                break;
-            asked = true;
-            continue;
-        }
-        if (kind != 0x30 || body.size() < 2)
-            continue;
-        const std::size_t topic_length = (std::size_t(std::uint8_t(body[0])) << 8) | std::uint8_t(body[1]);
-        const int         qos          = (header >> 1) & 3;
-        std::size_t       offset       = 2 + topic_length + (qos > 0 ? 2 : 0);
-        if (offset > body.size())
-            continue;
-        if (qos == 1) {
-            std::string ack = body.substr(2 + topic_length, 2);
-            link.write(packet(0x40, ack));
-        }
-        if (!asked)
-            continue;
-        const std::string topic  = body.substr(2, topic_length);
-        const json        report = json::parse(body.substr(offset), nullptr, false);
+    std::string topic, payload;
+    while (next_report(link, topic, payload)) {
+        const json report = json::parse(payload, nullptr, false);
         if (!report.is_object())
             continue;
         std::string type = text_of(report, "type");
@@ -469,6 +501,350 @@ Result read_ace(const std::string& host, const Fetch& fetch, int timeout_ms)
             return failed(result, Error::NoAce);
     }
     return failed(result, Error::NoAnswer);
+}
+
+Error upload_address(const std::string& host, const Fetch& fetch, std::string& url)
+{
+    std::string body, error;
+    if (!fetch("GET", "http://" + host + ":" + std::to_string(INFO_PORT) + "/info", body, error))
+        return Error::Unreachable;
+    const json info = json::parse(body, nullptr, false);
+    if (!info.is_object())
+        return Error::NotAPrinter;
+    if (text_of(info, "ctrlType") == "cloud")
+        return Error::CloudMode;
+    const std::string supplied = text_of(info, "fileUploadurl");
+    if (supplied.empty())
+        return Error::NotOffered;
+    // The path and query the printer names, on the host the user entered, as for /ctrl.
+    std::string path_url;
+    if (!ctrl_url(host, supplied, "", path_url))
+        return Error::NotAPrinter;
+    // ctrl_url always appends "?" and the extra query: drop what an empty one left behind.
+    while (!path_url.empty() && (path_url.back() == '?' || path_url.back() == '&'))
+        path_url.pop_back();
+    url = path_url;
+    return Error::None;
+}
+
+Result start_print(const std::string& host, const Fetch& fetch, const PrintJob& job, std::string& answer, int timeout_ms)
+{
+    Result result = handshake(host, fetch);
+    if (result.error != Error::None)
+        return result;
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
+    BrokerLink link(deadline);
+    if (!open_broker(link, host, result))
+        return result;
+    const json ams = json::parse(job.ams_settings, nullptr, false);
+    const std::string taskid = std::to_string(100000000 + std::random_device{}() % 900000000);
+    // Leveling, vibration compensation, flow calibration, timelapse, camera detection and
+    // drying stay off, as the reference client sends: a start with leveling on can hang on the
+    // printer waiting for its bed to preheat.
+    const json start = {{"type", "print"},
+                        {"action", "start"},
+                        {"timestamp", now_ms()},
+                        {"msgid", random_text(32, "0123456789abcdef")},
+                        {"data",
+                         {{"taskid", taskid},
+                          {"filename", job.file_name},
+                          {"filepath", "/"},
+                          {"filetype", 1},
+                          {"filesize", job.file_size},
+                          {"md5", job.md5},
+                          {"ams_settings", ams.is_object() ? ams : json{{"use_ams", false}, {"ams_box_mapping", json::array()}}},
+                          {"task_settings",
+                           {{"auto_leveling", 0},
+                            {"vibration_compensation", 0},
+                            {"flow_calibration", 0},
+                            {"timelapse", {{"status", 0}}},
+                            {"ai_settings", {{"status", 0}}},
+                            {"dry_mode", 0}}}}}};
+    if (!publish(link, result.session, "print", start.dump()))
+        return failed(result, Error::NoAnswer);
+    // The printer reports on "print" when it takes or refuses the start; no report in time is
+    // taken as taken, since a busy printer can be slow to say so.
+    std::string topic, payload;
+    while (next_report(link, topic, payload)) {
+        const json report = json::parse(payload, nullptr, false);
+        if (!report.is_object() || text_of(report, "type") != "print")
+            continue;
+        const auto code = report.find("code");
+        if (code != report.end() && code->is_number_integer() && code->get<int>() != 200) {
+            answer = text_of(report, "msg");
+            if (answer.empty())
+                answer = "code " + std::to_string(code->get<int>());
+            return failed(result, Error::Refused);
+        }
+        if (text_of(report, "action") == "start")
+            break;
+    }
+    link.write(packet(0xE0, {}));
+    return result;
+}
+
+namespace {
+
+// The "; key = value" comments in `text`, keys in lower case with single spaces. The first wins.
+void read_settings(const std::string& text, bool drop_first, bool drop_last, std::map<std::string, std::string>& found)
+{
+    static const std::regex setting(R"(^;\s*([A-Za-z_][A-Za-z0-9_ \[\]]*?)\s*=\s*(.*?)\s*$)");
+    std::size_t start = 0;
+    if (drop_first) {
+        start = text.find('\n');
+        start = start == std::string::npos ? text.size() : start + 1;
+    }
+    while (start < text.size()) {
+        std::size_t end = text.find('\n', start);
+        if (end == std::string::npos) {
+            if (drop_last)
+                break;
+            end = text.size();
+        }
+        // Settings lines are short; a long one is G-code or a custom G-code block.
+        if (text[start] == ';' && end - start < 4096) {
+            std::smatch match;
+            const std::string line = text.substr(start, end - start);
+            if (std::regex_match(line, match, setting)) {
+                std::string key;
+                for (char c : match[1].str()) {
+                    if (c == ' ' && (key.empty() || key.back() == ' '))
+                        continue;
+                    key += char(std::tolower(static_cast<unsigned char>(c)));
+                }
+                while (!key.empty() && key.back() == ' ')
+                    key.pop_back();
+                found.emplace(key, match[2].str());
+            }
+        }
+        start = end + 1;
+    }
+}
+
+std::vector<std::string> split(const std::string& text, char separator)
+{
+    std::vector<std::string> parts;
+    std::size_t              start = 0;
+    while (true) {
+        const std::size_t end  = text.find(separator, start);
+        std::string       part = text.substr(start, end == std::string::npos ? std::string::npos : end - start);
+        const auto        first = part.find_first_not_of(" \t\"");
+        const auto        last  = part.find_last_not_of(" \t\"\r");
+        parts.push_back(first == std::string::npos ? std::string() : part.substr(first, last - first + 1));
+        if (end == std::string::npos)
+            return parts;
+        start = end + 1;
+    }
+}
+
+// "#RRGGBB" in upper case, or empty.
+std::string normal_color(const std::string& text)
+{
+    if (text.size() < 7 || text[0] != '#')
+        return {};
+    std::string color = "#";
+    for (std::size_t i = 1; i < 7; ++i) {
+        if (!std::isxdigit(static_cast<unsigned char>(text[i])))
+            return {};
+        color += char(std::toupper(static_cast<unsigned char>(text[i])));
+    }
+    return color;
+}
+
+json rgba(const std::string& color)
+{
+    const std::string normal = normal_color(color);
+    if (normal.empty())
+        return json::array({255, 255, 255, 255});
+    json channels = json::array();
+    for (std::size_t i = 1; i < 7; i += 2)
+        channels.push_back(std::stoi(normal.substr(i, 2), nullptr, 16));
+    channels.push_back(255);
+    return channels;
+}
+
+int color_distance(const std::string& a, const std::string& b)
+{
+    const json x = rgba(a), y = rgba(b);
+    int        sum = 0;
+    for (std::size_t i = 0; i < 3; ++i) {
+        const int d = x[i].get<int>() - y[i].get<int>();
+        sum += d * d;
+    }
+    return sum;
+}
+
+// A material's family: its first word in upper case. "PLA+", "PLA Silk" and "PLA-CF" are PLA.
+std::string family(const std::string& material)
+{
+    std::string word;
+    for (char c : material) {
+        if (std::isalnum(static_cast<unsigned char>(c)))
+            word += char(std::toupper(static_cast<unsigned char>(c)));
+        else if (!word.empty())
+            break;
+    }
+    return word;
+}
+
+} // namespace
+
+FileFilaments file_filaments(const std::string& head, const std::string& tail)
+{
+    std::map<std::string, std::string> settings;
+    read_settings(head, false, !tail.empty(), settings);
+    if (!tail.empty())
+        read_settings(tail, true, false, settings);
+
+    FileFilaments file;
+    if (const auto types = settings.find("filament_type"); types != settings.end())
+        file.materials = split(types->second, ';');
+    if (const auto colors = settings.find("filament_colour"); colors != settings.end())
+        for (const std::string& color : split(colors->second, ';'))
+            file.colors.push_back(normal_color(color));
+    // The amount each filament used, by weight or length: a filament with more than none is used.
+    // A line with anything unreadable in it says nothing.
+    for (const char* key : {"filament used [g]", "filament used [mm]"}) {
+        const auto amounts = settings.find(key);
+        if (amounts == settings.end())
+            continue;
+        std::vector<int> used;
+        bool             readable = true;
+        const auto       parts    = split(amounts->second, ',');
+        for (std::size_t i = 0; i < parts.size() && readable; ++i) {
+            char*        end   = nullptr;
+            const double value = std::strtod(parts[i].c_str(), &end);
+            readable           = !parts[i].empty() && end == parts[i].c_str() + parts[i].size() && std::isfinite(value);
+            if (readable && value > 0)
+                used.push_back(int(i));
+        }
+        if (readable && !used.empty()) {
+            file.used = std::move(used);
+            break;
+        }
+    }
+    // A file that does not say what it uses prints with the first filament it names.
+    if (file.used.empty())
+        file.used.push_back(0);
+    return file;
+}
+
+FilamentMap map_filaments(const FileFilaments& file, const std::vector<AceSlot>& slots)
+{
+    FilamentMap map;
+    if (slots.empty()) {
+        map.missing = file.used.empty() ? 0 : file.used.front();
+        return map;
+    }
+    const int primary = std::min_element(slots.begin(), slots.end(), [](const AceSlot& a, const AceSlot& b) { return a.box < b.box; })->box;
+    std::vector<const AceSlot*> spools;
+    for (const AceSlot& slot : slots)
+        if (slot.box == primary && slot.loaded)
+            spools.push_back(&slot);
+
+    std::vector<const AceSlot*> taken;
+    const auto is_taken = [&taken](const AceSlot* slot) { return std::find(taken.begin(), taken.end(), slot) != taken.end(); };
+    json       mapping  = json::array();
+    for (int filament : file.used) {
+        const std::string material = filament < int(file.materials.size()) ? file.materials[filament] : std::string();
+        const std::string color    = filament < int(file.colors.size()) ? file.colors[filament] : std::string();
+        const std::string wanted   = family(material);
+        // A slot whose material is unknown fits any filament; so does any slot for a filament
+        // whose material is unknown.
+        const auto fits = [&wanted](const AceSlot* slot) {
+            const std::string loaded = family(slot->material);
+            return wanted.empty() || loaded.empty() || loaded == wanted;
+        };
+        // The same colour; then the slot of the same number, as slicers map by default; then the
+        // nearest colour. A slot no other filament took first.
+        const auto pick = [&](bool shared) -> const AceSlot* {
+            std::vector<const AceSlot*> free;
+            for (const AceSlot* slot : spools)
+                if (fits(slot) && (shared || !is_taken(slot)))
+                    free.push_back(slot);
+            for (const AceSlot* slot : free)
+                if (!color.empty() && normal_color(slot->color) == color)
+                    return slot;
+            for (const AceSlot* slot : free)
+                if (slot->index == filament)
+                    return slot;
+            const auto nearest = std::min_element(free.begin(), free.end(), [&color](const AceSlot* a, const AceSlot* b) {
+                return color_distance(color, a->color) < color_distance(color, b->color);
+            });
+            return nearest == free.end() ? nullptr : *nearest;
+        };
+        const AceSlot* chosen = pick(false);
+        if (chosen == nullptr)
+            chosen = pick(true);
+        if (chosen == nullptr) {
+            map.missing = filament;
+            return map;
+        }
+        taken.push_back(chosen);
+        mapping.push_back({{"paint_index", filament},
+                           {"ams_index", chosen->index},
+                           {"paint_color", rgba(color.empty() ? chosen->color : color)},
+                           {"ams_color", rgba(chosen->color)},
+                           {"material_type", material.empty() ? chosen->material : material}});
+    }
+    map.settings = json{{"use_ams", true}, {"ams_box_mapping", mapping}}.dump();
+    return map;
+}
+
+std::string no_ace_settings() { return json{{"use_ams", false}, {"ams_box_mapping", json::array()}}.dump(); }
+
+std::string printer_file_name(const std::string& name)
+{
+    std::string base = name.substr(name.find_last_of("/\\") == std::string::npos ? 0 : name.find_last_of("/\\") + 1);
+    const std::string suffix = ".gcode";
+    if (base.size() >= suffix.size() &&
+        std::equal(suffix.rbegin(), suffix.rend(), base.rbegin(), [](char a, char b) { return a == std::tolower(static_cast<unsigned char>(b)); }))
+        base.erase(base.size() - suffix.size());
+    std::string stem;
+    for (std::size_t i = 0; i < base.size(); ++i) {
+        const unsigned char c = static_cast<unsigned char>(base[i]);
+        if (c >= 0x80) {
+            // One "_" for each UTF-8 character, not for each of its bytes.
+            if ((c & 0xC0) != 0x80)
+                stem += '_';
+            continue;
+        }
+        stem += std::isalnum(c) || std::strchr(" ._()+-", c) != nullptr ? char(c) : '_';
+    }
+    const std::size_t first = stem.find_first_not_of(". ");
+    stem                    = first == std::string::npos ? std::string() : stem.substr(first);
+    stem                    = stem.substr(0, 100 - suffix.size());
+    while (!stem.empty() && stem.back() == ' ')
+        stem.pop_back();
+    return (stem.empty() ? std::string("print") : stem) + suffix;
+}
+
+bool read_upload_answer(const std::string& body, const std::string& sent, std::string& stored, int& code)
+{
+    code              = 0;
+    const json answer = json::parse(body, nullptr, false);
+    if (!answer.is_object())
+        return false;
+    // A good upload answers with code 0 or 200, or none.
+    const auto given = answer.find("code");
+    if (given != answer.end()) {
+        if (!given->is_number_integer())
+            return false;
+        code = given->get<int>();
+        if (code != 0 && code != 200)
+            return false;
+    }
+    stored            = sent;
+    const auto data   = answer.find("data");
+    if (data != answer.end() && data->is_object()) {
+        const std::string kept = text_of(*data, "gcode");
+        static const std::regex plain(R"([A-Za-z0-9 ._()+\-]{1,255})");
+        if (std::regex_match(kept, plain) && kept.front() != '.' && kept.size() > 6 &&
+            kept.compare(kept.size() - 6, 6, ".gcode") == 0)
+            stored = kept;
+    }
+    code = 0;
+    return true;
 }
 
 } // namespace AnycubicLan

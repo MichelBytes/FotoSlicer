@@ -1,10 +1,14 @@
 #include "ModelsPanel.hpp"
 
+#include <algorithm>
 #include <array>
 #include <string>
 #include <utility>
+#include <vector>
 
+#include <boost/algorithm/string/classification.hpp>
 #include <boost/algorithm/string/predicate.hpp>
+#include <boost/algorithm/string/split.hpp>
 #include <boost/algorithm/string/trim.hpp>
 #include <boost/filesystem/operations.hpp>
 #include <boost/nowide/fstream.hpp>
@@ -69,6 +73,22 @@ std::string file_name_of(const std::string& url)
 {
     std::string path = url.substr(0, url.find_first_of("?#"));
     return Http::url_decode(path.substr(path.find_last_of('/') + 1));
+}
+
+// The items (a JSON array) whose title holds a word of `query` of two letters or more.
+std::string named_for(const std::string& items_json, const std::string& query)
+{
+    std::vector<std::string> words;
+    boost::split(words, query, boost::is_any_of(" \t,;"), boost::token_compress_on);
+    nlohmann::json       kept  = nlohmann::json::array();
+    const nlohmann::json items = nlohmann::json::parse(items_json, nullptr, false);
+    if (items.is_array())
+        for (const nlohmann::json& item : items) {
+            const std::string title = item.is_object() && item.contains("title") && item["title"].is_string() ? item["title"].get<std::string>() : "";
+            if (std::any_of(words.begin(), words.end(), [&title](const std::string& word) { return word.size() >= 2 && boost::icontains(title, word); }))
+                kept.push_back(item);
+        }
+    return kept.dump();
 }
 
 wxColour bar_colour() { return StateColor::darkModeColorFor(wxColour("#F8F8F8")); }
@@ -487,8 +507,17 @@ void ModelsPanel::on_searcher_message(const wxString& message)
         m_searcher->RunScript(from_u8(fill_script(COLLECT_SCRIPT, site, m_query)));
         return;
     }
-    const auto items = answer.find("items");
-    add_results(site.name, items != answer.end() ? items->dump() : "[]", answer.value("error", std::string()));
+    const auto  items = answer.find("items");
+    std::string error = answer.value("error", std::string());
+    std::string found = items != answer.end() ? items->dump() : "[]";
+    if (site.type_query) {
+        // Typed into the site's own box: when its search does not run, the links read are the
+        // page's own. Only models named for a word of the query are taken as found.
+        found = named_for(found, m_query);
+        if (found == "[]" && error.empty())
+            error = into_u8(_L("no matching models"));
+    }
+    add_results(site.name, found, error);
     ++m_search_site;
     search_next_site();
 }

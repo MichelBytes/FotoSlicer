@@ -6,7 +6,6 @@
 #include <utility>
 
 #include <boost/algorithm/string/predicate.hpp>
-#include <boost/algorithm/string/trim.hpp>
 #include <wx/brush.h>
 #include <wx/colour.h>
 #include <wx/dcbuffer.h>
@@ -26,7 +25,7 @@
 #include "libslic3r/Config.hpp"
 #include "libslic3r/Preset.hpp"
 #include "libslic3r/PresetBundle.hpp"
-#include "slic3r/Utils/Http.hpp"
+#include "slic3r/Utils/AnycubicLanHost.hpp"
 #include "Widgets/Button.hpp"
 #include "Widgets/DialogButtons.hpp"
 #include "Widgets/Label.hpp"
@@ -66,43 +65,6 @@ public:
 private:
     wxColour m_colour;
 };
-
-bool http_fetch(const std::string& method, const std::string& url, std::string& body, std::string& error)
-{
-    bool ok   = false;
-    auto http = method == "POST" ? Http::post(url) : Http::get(url);
-    http.timeout_connect(5)
-        .timeout_max(10)
-        .on_complete([&](std::string answer, unsigned) {
-            body = std::move(answer);
-            ok   = true;
-        })
-        .on_error([&](std::string, std::string reason, unsigned status) { error = status != 0 ? "HTTP " + std::to_string(status) : reason; })
-        .perform_sync();
-    return ok;
-}
-
-wxString error_text(AnycubicLan::Error error, const wxString& host)
-{
-    using AnycubicLan::Error;
-    switch (error) {
-    case Error::None: return {};
-    case Error::Unreachable:
-        // TRN %1% is the printer's IP address.
-        return format_wxstr(_L("No printer answered at %1%. Check the address shown on the printer's network screen, and that this computer is on the same network."), host);
-    case Error::NotAPrinter:
-        // TRN %1% is the IP address the user entered.
-        return format_wxstr(_L("The device at %1% did not answer like an Anycubic printer."), host);
-    case Error::CloudMode: return _L("The printer is in cloud mode. Turn on LAN Mode in the printer's network settings, then try again.");
-    case Error::NotOffered: return _L("This printer's firmware does not offer the LAN connection. Update the printer's firmware, then try again.");
-    case Error::Refused:
-    case Error::BrokerRefused: return _L("The printer refused the connection. Turn LAN Mode off and on again on the printer, then try again.");
-    case Error::Unreadable: return _L("The printer's answer could not be read.");
-    case Error::NoAnswer: return _L("The printer did not report its ACE unit in time. Try again.");
-    case Error::NoAce: return _L("The printer reports no ACE unit attached.");
-    }
-    return {};
-}
 
 // The filament_id of the preset that best fits a material the unit reports: an Anycubic preset
 // named for it, then one of that type, then a generic one. Unknown otherwise, which sends the
@@ -187,8 +149,7 @@ const std::string&                       AceFilamentDialog::used_model() { retur
 
 void AceFilamentDialog::start_reading()
 {
-    std::string host = into_u8(m_host->GetTextCtrl()->GetValue());
-    boost::algorithm::trim(host);
+    const std::string host = AnycubicLan::bare_host(into_u8(m_host->GetTextCtrl()->GetValue()));
     if (host.empty() || !m_read->IsEnabled())
         return;
     wxGetApp().app_config->set(HOST_KEY, host);
@@ -199,7 +160,7 @@ void AceFilamentDialog::start_reading()
 
     std::shared_ptr<std::atomic<bool>> alive = m_alive;
     std::thread([this, alive, host]() {
-        AnycubicLan::Result result = AnycubicLan::read_ace(host, http_fetch);
+        AnycubicLan::Result result = AnycubicLan::read_ace(host, AnycubicLan::http_fetch);
         wxGetApp().CallAfter([this, alive, answer = std::move(result), host]() {
             if (alive->load())
                 show_result(answer, from_u8(host));
@@ -212,7 +173,7 @@ void AceFilamentDialog::show_result(const AnycubicLan::Result& result, const wxS
     m_read->Enable(true);
     m_slots = result.slots;
     s_read_model = result.session.model_name;
-    const wxString error = error_text(result.error, host);
+    const wxString error = AnycubicLan::error_text(result.error, result.detail, host);
     m_status->SetLabel(error.IsEmpty() ? from_u8(result.session.model_name) : error);
     m_status->Wrap(FromDIP(420));
     show_slots();

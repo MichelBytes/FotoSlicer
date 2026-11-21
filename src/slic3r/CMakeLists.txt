@@ -787,6 +787,8 @@ set(SLIC3R_GUI_SOURCES
     Utils/Flashforge.hpp
     Utils/AnycubicLan.cpp
     Utils/AnycubicLan.hpp
+    Utils/AnycubicLanHost.cpp
+    Utils/AnycubicLanHost.hpp
     Utils/FontConfigHelp.cpp
     Utils/FontConfigHelp.hpp
     Utils/HexFile.cpp
