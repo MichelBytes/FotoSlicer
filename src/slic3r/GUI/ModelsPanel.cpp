@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <array>
+#include <functional>
+#include <initializer_list>
 #include <string>
 #include <utility>
 #include <vector>
@@ -75,39 +77,20 @@ std::string file_name_of(const std::string& url)
     return Http::url_decode(path.substr(path.find_last_of('/') + 1));
 }
 
-// The items (a JSON array) whose title holds a word of `query` of two letters or more.
-std::string named_for(const std::string& items_json, const std::string& query)
-{
-    std::vector<std::string> words;
-    boost::split(words, query, boost::is_any_of(" \t,;"), boost::token_compress_on);
-    nlohmann::json       kept  = nlohmann::json::array();
-    const nlohmann::json items = nlohmann::json::parse(items_json, nullptr, false);
-    if (items.is_array())
-        for (const nlohmann::json& item : items) {
-            const std::string title = item.is_object() && item.contains("title") && item["title"].is_string() ? item["title"].get<std::string>() : "";
-            if (std::any_of(words.begin(), words.end(), [&title](const std::string& word) { return word.size() >= 2 && boost::icontains(title, word); }))
-                kept.push_back(item);
-        }
-    return kept.dump();
-}
-
 wxColour bar_colour() { return StateColor::darkModeColorFor(wxColour("#F8F8F8")); }
 
-// The sites Search All runs in the hidden browser, in order. `url` holds %s for the query; a site
-// with `type_query` has no known search address, so the query is typed into its own search box.
+// The sites Search All runs in the hidden browser, in order: those with no search a plain
+// request may ask. `url` holds %s for the query.
 struct BrowserSearch
 {
     const char* name;
     const char* url;
     const char* link_pattern; // a model page's address, as a JavaScript regular expression
-    bool        type_query;
     bool        thangs_api;
 };
-const std::array<BrowserSearch, 4> BROWSER_SEARCHES = {{
-    {"Makeronline", "https://makeronline.com/en/", R"(/model/[^/]+/\d+\.html)", true, false},
-    {"Thingiverse", "https://www.thingiverse.com/search?q=%s&type=things&sort=relevant", R"(thing:\d+/?([?#].*)?$)", false, false},
-    {"MakerWorld", "https://makerworld.com/en/search/models?keyword=%s", R"(/models/\d+)", false, false},
-    {"Thangs", "https://thangs.com/search/%s?scope=all", R"(thangs\.com/(m/\d+|.*3d-model))", false, true},
+const std::array<BrowserSearch, 2> BROWSER_SEARCHES = {{
+    {"Thingiverse", "https://www.thingiverse.com/search?q=%s&type=things&sort=relevant", R"(thing:\d+/?([?#].*)?$)", false},
+    {"Thangs", "https://thangs.com/search/%s?scope=all", R"(thangs\.com/(m/\d+|.*3d-model))", true},
 }};
 
 // A JavaScript string literal, safe inside a <script> element too.
@@ -169,22 +152,6 @@ const char* COLLECT_SCRIPT = R"JS((function () {
     } else setTimeout(poll, 500);
   };
   poll();
-})();)JS";
-
-// Types the query into a site's own search box, for a site whose search address is not known.
-const char* TYPE_SCRIPT = R"JS((function () {
-  const site = SITE, query = QUERY;
-  window.__fotoslicer_before = new Set(Array.from(document.querySelectorAll('a[href]'), a => a.href));
-  const input = document.querySelector('input[type=search], input[placeholder*="earch" i], input[name*="search" i], input[class*="search" i], input[type=text]');
-  if (!input) { window.wx.postMessage(JSON.stringify({fotoslicer_search: site, query: query, items: [], error: 'no search box'})); return; }
-  input.focus();
-  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, query);
-  input.dispatchEvent(new Event('input', {bubbles: true}));
-  input.dispatchEvent(new Event('change', {bubbles: true}));
-  for (const type of ['keydown', 'keypress', 'keyup'])
-    input.dispatchEvent(new KeyboardEvent(type, {key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true}));
-  const form = input.closest('form');
-  if (form) { if (form.requestSubmit) form.requestSubmit(); else form.submit(); }
 })();)JS";
 
 // Thangs: the JSON its search page asks for, which has likes and downloads; paid models left out.
@@ -339,16 +306,9 @@ ModelsPanel::ModelsPanel(wxWindow* parent)
         if (&event.GetTimer() == &m_watch) {
             watch_downloads();
         } else if (m_search_site < BROWSER_SEARCHES.size()) {
-            if (m_search_step == 1) {
-                // Typed, and the site stayed on its page: read the results that replaced its content.
-                m_search_step = 2;
-                m_searcher->RunScript(from_u8(fill_script(COLLECT_SCRIPT, BROWSER_SEARCHES[m_search_site], m_query)));
-                m_search_timer.StartOnce(20000);
-            } else {
-                add_results(BROWSER_SEARCHES[m_search_site].name, "[]", into_u8(_L("no answer")));
-                ++m_search_site;
-                search_next_site();
-            }
+            add_results(BROWSER_SEARCHES[m_search_site].name, "[]", into_u8(_L("no answer")));
+            ++m_search_site;
+            search_next_site();
         }
     });
     m_watch.Start(1500);
@@ -447,14 +407,14 @@ void ModelsPanel::start_search()
         run_on_results_page("fsStatus(" + js_string(site) + "," + js_string(into_u8(_L("searching..."))) + ");");
     m_status->SetLabel(_L("Searching every site..."));
 
-    search_printables(query);
+    search_sites_with_json(query);
     if (m_searcher == nullptr) {
         // A browser placed out of sight runs its pages at full speed, unlike a hidden one.
         m_searcher = WebView::CreateWebView(this, "about:blank");
         if (m_searcher != nullptr) {
             // Full size but outside the panel: sites draw their results only into a real viewport.
             m_searcher->SetSize(-4000, -4000, FromDIP(1280), FromDIP(900));
-            m_searcher->Bind(wxEVT_WEBVIEW_LOADED, [this](wxWebViewEvent&) { on_searcher_loaded(); });
+            m_searcher->Bind(wxEVT_WEBVIEW_LOADED, [this](wxWebViewEvent& event) { on_searcher_loaded(into_u8(event.GetURL())); });
             m_searcher->Bind(wxEVT_WEBVIEW_SCRIPT_MESSAGE_RECEIVED, [this](wxWebViewEvent& event) { on_searcher_message(event.GetString()); });
             m_searcher->Bind(wxEVT_WEBVIEW_NEWWINDOW, [](wxWebViewEvent&) {});
         }
@@ -472,26 +432,23 @@ void ModelsPanel::search_next_site()
         return;
     }
     const BrowserSearch& site = BROWSER_SEARCHES[m_search_site];
-    m_search_step             = 0;
     m_searcher->LoadURL(from_u8(replace_all_copy(site.url, "%s", Http::url_encode(m_query))));
     m_search_timer.StartOnce(25000);
 }
 
-void ModelsPanel::on_searcher_loaded()
+void ModelsPanel::on_searcher_loaded(const std::string& url)
 {
     if (m_search_site >= BROWSER_SEARCHES.size())
         return;
+    // Read every page the site loads: a bot check shows its own page first, then loads the
+    // results, and the script reading the first page goes with it. A late page of the site
+    // searched before is not read.
     const BrowserSearch& site = BROWSER_SEARCHES[m_search_site];
-    const auto fill = [&](const char* script) { return from_u8(fill_script(script, site, m_query)); };
-    if (site.type_query && m_search_step == 0) {
-        m_search_step = 1;
-        m_searcher->RunScript(fill(TYPE_SCRIPT));
-        m_search_timer.StartOnce(3000); // read the results here if the site does not load a new page
-    } else if (m_search_step != 2) {
-        m_search_step = 2;
-        m_searcher->RunScript(fill(site.thangs_api ? THANGS_SCRIPT : COLLECT_SCRIPT));
-        m_search_timer.StartOnce(20000);
-    }
+    const std::string    host = std::string(site.url).substr(0, std::string(site.url).find('/', 8));
+    if (!boost::istarts_with(url, host))
+        return;
+    m_searcher->RunScript(from_u8(fill_script(site.thangs_api ? THANGS_SCRIPT : COLLECT_SCRIPT, site, m_query)));
+    m_search_timer.StartOnce(20000);
 }
 
 void ModelsPanel::on_searcher_message(const wxString& message)
@@ -507,17 +464,8 @@ void ModelsPanel::on_searcher_message(const wxString& message)
         m_searcher->RunScript(from_u8(fill_script(COLLECT_SCRIPT, site, m_query)));
         return;
     }
-    const auto  items = answer.find("items");
-    std::string error = answer.value("error", std::string());
-    std::string found = items != answer.end() ? items->dump() : "[]";
-    if (site.type_query) {
-        // Typed into the site's own box: when its search does not run, the links read are the
-        // page's own. Only models named for a word of the query are taken as found.
-        found = named_for(found, m_query);
-        if (found == "[]" && error.empty())
-            error = into_u8(_L("no matching models"));
-    }
-    add_results(site.name, found, error);
+    const auto items = answer.find("items");
+    add_results(site.name, items != answer.end() ? items->dump() : "[]", answer.value("error", std::string()));
     ++m_search_site;
     search_next_site();
 }
@@ -549,47 +497,126 @@ void ModelsPanel::add_results(const std::string& site, const std::string& items_
                         (clean.empty() && !error.empty() ? js_string(error) : std::string("''")) + ");");
 }
 
-void ModelsPanel::search_printables(const std::string& query)
+void ModelsPanel::search_json(const std::string& site, Http http, const std::function<nlohmann::json(const nlohmann::json&)>& items_of)
 {
-    const nlohmann::json body = {{"query", PRINTABLES_QUERY},
-                                 {"variables", {{"query", query}, {"limit", 24}, {"offset", 0}, {"ordering", "best_match"}}}};
     auto alive = m_alive;
-    Http::post("https://api.printables.com/graphql/")
-        .header("Content-Type", "application/json")
-        .header("Accept", "application/json")
-        .set_post_body(body.dump())
+    http.header("Accept", "application/json")
         .timeout_connect(10)
         .timeout_max(30)
-        .on_complete([this, alive, query](std::string answer, unsigned) {
-            nlohmann::json       items  = nlohmann::json::array();
+        .on_complete([this, alive, site, items_of, query = m_query](std::string answer, unsigned) {
             const nlohmann::json parsed = nlohmann::json::parse(answer, nullptr, false);
-            if (parsed.is_object() && parsed.contains("data") && parsed["data"].is_object() && parsed["data"].contains("result") &&
-                parsed["data"]["result"].is_object() && parsed["data"]["result"].contains("items") && parsed["data"]["result"]["items"].is_array())
-                for (const nlohmann::json& item : parsed["data"]["result"]["items"]) {
-                    if (!item.is_object() || !item.contains("id"))
-                        continue;
-                    const std::string id   = item["id"].is_string() ? item["id"].get<std::string>() : item["id"].dump();
-                    const std::string slug = item.value("slug", std::string());
-                    nlohmann::json    entry = {{"title", item.value("name", std::string())},
-                                               {"url", "https://www.printables.com/model/" + id + "-" + slug},
-                                               {"likes", item.value("likesCount", 0)},
-                                               {"downloads", item.value("downloadCount", 0)}};
-                    if (item.contains("image") && item["image"].is_object() && item["image"].value("filePath", std::string()) != "")
-                        entry["image"] = "https://media.printables.com/" + item["image"]["filePath"].get<std::string>();
-                    items.push_back(std::move(entry));
-                }
-            wxGetApp().CallAfter([this, alive, query, json = items.dump()]() {
+            nlohmann::json       items  = nlohmann::json::array();
+            try {
+                items = items_of(parsed);
+            } catch (const nlohmann::json::exception&) {
+                // An answer of another shape than expected: nothing found.
+            }
+            wxGetApp().CallAfter([this, alive, site, query, json = items.dump()]() {
                 if (alive->load() && query == m_query)
-                    add_results("Printables", json, "");
+                    add_results(site, json, "");
             });
         })
-        .on_error([this, alive, query](std::string, std::string error, unsigned status) {
-            wxGetApp().CallAfter([this, alive, query, error, status]() {
+        .on_error([this, alive, site, query = m_query](std::string, std::string error, unsigned status) {
+            wxGetApp().CallAfter([this, alive, site, query, error, status]() {
                 if (alive->load() && query == m_query)
-                    add_results("Printables", "[]", status != 0 ? "HTTP " + std::to_string(status) : error);
+                    add_results(site, "[]", status != 0 ? "HTTP " + std::to_string(status) : error);
             });
         })
         .perform();
+}
+
+void ModelsPanel::search_sites_with_json(const std::string& query)
+{
+    // Every reader below takes only what it checks the type of: `at` and `get` throw on anything
+    // else, and search_json() takes that as nothing found.
+    const auto array_at = [](const nlohmann::json& parent, std::initializer_list<const char*> path) {
+        const nlohmann::json* node = &parent;
+        for (const char* key : path) {
+            if (!node->is_object() || !node->contains(key))
+                return nlohmann::json::array();
+            node = &(*node)[key];
+        }
+        return node->is_array() ? *node : nlohmann::json::array();
+    };
+    const auto text = [](const nlohmann::json& item, const char* key) {
+        const auto it = item.find(key);
+        return it != item.end() && it->is_string() ? it->get<std::string>() : std::string();
+    };
+    const auto number = [](const nlohmann::json& item, const char* key) {
+        const auto it = item.find(key);
+        return it != item.end() && it->is_number() ? it->get<double>() : 0.;
+    };
+    const auto flag = [](const nlohmann::json& item, const char* key) {
+        const auto it = item.find(key);
+        return it != item.end() && it->is_boolean() && it->get<bool>();
+    };
+    const auto id_of = [](const nlohmann::json& item, const char* key) {
+        const auto it = item.find(key);
+        return it == item.end() ? std::string() : it->is_string() ? it->get<std::string>() : it->is_number_integer() ? it->dump() : std::string();
+    };
+
+    const nlohmann::json printables = {{"query", PRINTABLES_QUERY},
+                                       {"variables", {{"query", query}, {"limit", 24}, {"offset", 0}, {"ordering", "best_match"}}}};
+    Http printables_search = Http::post("https://api.printables.com/graphql/");
+    printables_search.header("Content-Type", "application/json").set_post_body(printables.dump());
+    search_json("Printables", std::move(printables_search),
+                [=](const nlohmann::json& answer) {
+                    nlohmann::json items = nlohmann::json::array();
+                    for (const nlohmann::json& item : array_at(answer, {"data", "result", "items"})) {
+                        const std::string id = id_of(item, "id");
+                        if (id.empty())
+                            continue;
+                        nlohmann::json entry = {{"title", text(item, "name")},
+                                                {"url", "https://www.printables.com/model/" + id + "-" + text(item, "slug")},
+                                                {"likes", number(item, "likesCount")},
+                                                {"downloads", number(item, "downloadCount")}};
+                        if (const auto image = item.find("image"); image != item.end() && image->is_object() && !text(*image, "filePath").empty())
+                            entry["image"] = "https://media.printables.com/" + text(*image, "filePath");
+                        items.push_back(std::move(entry));
+                    }
+                    return items;
+                });
+
+    // Makeronline: the search its own page asks for. Adult models are left out.
+    const nlohmann::json makeronline = {{"page_size", 24}, {"page", 1}, {"keyword", query}, {"print_type", "0"}, {"weight", 1}, {"search", 1}};
+    Http makeronline_search = Http::post("https://makeronline.com/api/search/model/v2.8");
+    makeronline_search.header("Content-Type", "application/json").set_post_body(makeronline.dump());
+    search_json("Makeronline", std::move(makeronline_search),
+                [=](const nlohmann::json& answer) {
+                    nlohmann::json items = nlohmann::json::array();
+                    for (const nlohmann::json& item : array_at(answer, {"data", "data"})) {
+                        const std::string id = id_of(item, "mold_id");
+                        if (id.empty() || number(item, "is_adult_nsfw") != 0 || number(item, "is_premium") != 0)
+                            continue;
+                        std::string url = text(item, "target_url");
+                        if (!boost::istarts_with(url, "https://"))
+                            url = "https://makeronline.com/en/model/" + Http::url_encode(text(item, "title")) + "/" + id + ".html";
+                        items.push_back({{"title", text(item, "title")},
+                                         {"url", url},
+                                         {"image", text(item, "mold_image")},
+                                         {"likes", number(item, "like_num")},
+                                         {"downloads", number(item, "download_num")}});
+                    }
+                    return items;
+                });
+
+    // MakerWorld: its search service. Models bought with points and adult models are left out.
+    search_json("MakerWorld",
+                Http::get("https://makerworld.com/api/v1/search-service/select/design2?keyword=" + Http::url_encode(query) + "&limit=24&offset=0"),
+                [=](const nlohmann::json& answer) {
+                    nlohmann::json items = nlohmann::json::array();
+                    for (const nlohmann::json& item : array_at(answer, {"hits"})) {
+                        const std::string id = id_of(item, "id");
+                        if (id.empty() || flag(item, "nsfw") || flag(item, "is_point_redeemable"))
+                            continue;
+                        items.push_back({{"title", text(item, "title")},
+                                         {"url", "https://makerworld.com/en/models/" + id + "-" + text(item, "slug")},
+                                         {"image", text(item, "cover")},
+                                         {"likes", number(item, "likeCount")},
+                                         {"downloads", number(item, "downloadCount")}});
+                    }
+                    return items;
+                });
 }
 
 void ModelsPanel::run_on_results_page(const std::string& script)
