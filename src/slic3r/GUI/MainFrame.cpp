@@ -96,6 +96,7 @@
 #include "GLCanvas3D.hpp"
 #include "Plater.hpp"
 #include "AceFilamentDialog.hpp"
+#include "ModelsPanel.hpp"
 #ifdef SLIC3R_CAD
 #include "slic3r/GUI/CAD/DesignPanel.hpp"
 #include "slic3r/GUI/CAD/McpControl.hpp"
@@ -1640,6 +1641,11 @@ void MainFrame::init_tabpanel() {
     m_project_page = new LazyPage<ProjectPanel>(m_tabpanel, TAB_ID_PROJECT, 60);
     m_lazy_pages.push_back(m_project_page);
     m_tabpanel->AddPage(TAB_ID_PROJECT, m_project_page, _L("Project"), "tab_auxiliary_active");
+
+    // FotoSlicer: the free model sites, in an in-app browser; built when first opened.
+    m_models_page = new LazyPage<ModelsPanel>(m_tabpanel, TAB_ID_MODELS, -1);
+    m_lazy_pages.push_back(m_models_page);
+    m_tabpanel->AddPage(TAB_ID_MODELS, m_models_page, _L("Models"), "tab_auxiliary_active");
 
     // show_device() removes this tab for printers without the Bambu device tab, and the page
     // then never builds its panel.

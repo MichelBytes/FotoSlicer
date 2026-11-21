@@ -558,6 +558,8 @@ set(SLIC3R_GUI_SOURCES
     GUI/Tabbook.hpp
     GUI/TabButton.cpp
     GUI/TabButton.hpp
+    GUI/ModelsPanel.cpp
+    GUI/ModelsPanel.hpp
     GUI/PhotoshopPanels.cpp
     GUI/PhotoshopPanels.hpp
     GUI/ToolsPanel.cpp

@@ -121,6 +121,9 @@ jobs:
           "After Type tool: running=$(-not $p.HasExited)"
           Click 24 284; Start-Sleep 6; Shot 4
           "After Move tool: running=$(-not $p.HasExited)"
+          # The Models tab, right of Project in the tab row: the model sites in the built-in browser.
+          Click 655 52; Start-Sleep 20; Shot 5
+          "After Models tab: running=$(-not $p.HasExited)"
           "Running: $(-not $p.HasExited)"
           if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }
           Get-ChildItem "$env:DATA\log" -ErrorAction SilentlyContinue | Select-Object -Last 1 | ForEach-Object { Get-Content $_.FullName -Tail 40 }

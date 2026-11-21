@@ -52,6 +52,8 @@
 #define TAB_ID_MULTI_DEVICE  "multi_device"
 #define TAB_ID_PROJECT       "project"
 #define TAB_ID_CALIBRATION   "calibration"
+// FotoSlicer: the free model sites, in an in-app browser.
+#define TAB_ID_MODELS        "models"
 
 #define ENABEL_PRINT_ALL 0
 
@@ -79,6 +81,7 @@ class MonitorPanel;
 class MultiMachinePage;
 class ProjectPanel;
 class CalibrationPanel;
+class ModelsPanel;
 class PrinterWebView;
 class FilamentGroupPopup;
 class PA_Calibration_Dlg;
@@ -551,6 +554,7 @@ public:
     //AuxiliaryPanel*       m_auxiliary{ nullptr };
     LazyPage<MultiMachinePage>* m_multi_machine_page{ nullptr };
     LazyPage<ProjectPanel>* m_project_page{ nullptr };
+    LazyPage<ModelsPanel>*  m_models_page{ nullptr };
 
     LazyPage<CalibrationPanel>* m_calibration_page{ nullptr };
     LazyPage<WebViewPanel>* m_home_page { nullptr };
