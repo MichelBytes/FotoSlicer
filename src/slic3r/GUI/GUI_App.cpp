@@ -6607,6 +6607,11 @@ void maybe_attach_updater_signature(Http& http, const std::string& canonical_que
 
 void GUI_App::check_new_version_sf(bool show_tips, int by_user)
 {
+    // FotoSlicer: the check asks for OrcaSlicer's releases, and would offer to replace FotoSlicer
+    // with OrcaSlicer. FotoSlicer's builds are installed by hand.
+    if (by_user != 0)
+        InfoDialog(mainframe, _L("Check for Updates"), _L("FotoSlicer does not check for new versions. Install new FotoSlicer builds by hand.")).ShowModal();
+    return;
     AppConfig* app_config = wxGetApp().app_config;
     bool       check_stable_only = app_config->get_bool("check_stable_update_only");
     auto version_check_url = app_config->version_check_url();

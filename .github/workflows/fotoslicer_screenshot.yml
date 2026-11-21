@@ -64,7 +64,7 @@ jobs:
           New-Item -ItemType Directory -Force $data | Out-Null
           "DATA=$data" | Out-File -Append $env:GITHUB_ENV
           $conf = @{
-            app        = @{ language = 'en'; show_splash_screen = 'false'; dark_color_mode = '1'; version = '02.08.01.55' }
+            app        = @{ language = 'en'; show_splash_screen = 'false'; dark_color_mode = '1'; version = '02.08.01.55'; skip_version = '99.99.99' }
             firstguide = @{ finish = 'true'; privacy_use = 'false' }
             models     = @(@{ vendor = 'Anycubic'; model = 'Anycubic Kobra 4'; nozzle_diameter = '0.4' })
             presets    = @{ machine = 'Anycubic Kobra 4 0.4 nozzle'; process = '0.20mm Standard @Anycubic Kobra 4 0.4 nozzle'; filaments = @('Anycubic PLA @Anycubic Kobra 4 0.4 nozzle') }
