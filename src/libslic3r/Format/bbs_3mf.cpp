@@ -456,6 +456,9 @@ static constexpr const char *FONT_DESCRIPTOR_TYPE_ATTR = "font_descriptor_type";
 
 // TextConfiguration::FontProperty
 static constexpr const char *CHAR_GAP_ATTR    = "char_gap";
+// FotoSlicer: Warp Text
+static constexpr const char *WARP_ATTR        = "warp";
+static constexpr const char *WARP_BEND_ATTR   = "warp_bend";
 static constexpr const char *LINE_GAP_ATTR    = "line_gap";
 static constexpr const char *LINE_HEIGHT_ATTR = "line_height";
 static constexpr const char *BOLDNESS_ATTR    = "boldness";
@@ -9933,6 +9936,10 @@ void TextConfigurationSerialization::to_xml(std::stringstream &stream, const Tex
     const FontProp &fp = tc.style.prop;
     if (fp.char_gap.has_value())
         stream << CHAR_GAP_ATTR << "=\"" << *fp.char_gap << "\" ";
+    if (fp.warp.has_value() && *fp.warp > 0) {
+        stream << WARP_ATTR << "=\"" << *fp.warp << "\" ";
+        stream << WARP_BEND_ATTR << "=\"" << fp.warp_bend.value_or(0.f) << "\" ";
+    }
     if (fp.line_gap.has_value())
         stream << LINE_GAP_ATTR << "=\"" << *fp.line_gap << "\" ";
 
@@ -10007,6 +10014,11 @@ std::optional<TextConfiguration> TextConfigurationSerialization::read(const char
     FontProp fp;
     int char_gap = bbs_get_attribute_value_int(attributes, num_attributes, CHAR_GAP_ATTR);
     if (char_gap != 0) fp.char_gap = char_gap;
+    if (int warp = bbs_get_attribute_value_int(attributes, num_attributes, WARP_ATTR);
+        warp > 0 && warp < int(FontProp::Warp::count)) {
+        fp.warp      = warp;
+        fp.warp_bend = std::clamp(bbs_get_attribute_value_float(attributes, num_attributes, WARP_BEND_ATTR), -1.f, 1.f);
+    }
     int line_gap = bbs_get_attribute_value_int(attributes, num_attributes, LINE_GAP_ATTR); 
     if (line_gap != 0) fp.line_gap = line_gap;
     float boldness = bbs_get_attribute_value_float(attributes, num_attributes, BOLDNESS_ATTR);

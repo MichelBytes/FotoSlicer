@@ -1404,6 +1404,10 @@ namespace {
 /// <param name="prop">Containe Horizontal and vertical alignment</param>
 /// <param name="font">Needed for scale and font size</param>
 void align_shape(ExPolygonsWithIds &shapes, const std::wstring &text, const FontProp &prop, const FontFile &font);
+
+/// FotoSlicer: Photoshop's Warp Text. Bends the aligned text as a whole by prop.warp, as far as
+/// prop.warp_bend says; edges are subdivided first so straight strokes curve smoothly.
+void warp_shape(ExPolygonsWithIds &shapes, const FontProp &prop);
 }
 
 ExPolygonsWithIds Emboss::text2vshapes(FontFileWithCache &font_with_cache, const std::wstring& text, const FontProp &font_prop, const std::function<bool()>& was_canceled){
@@ -1430,6 +1434,7 @@ ExPolygonsWithIds Emboss::text2vshapes(FontFileWithCache &font_with_cache, const
     }
 
     align_shape(result, text, font_prop, font);
+    warp_shape(result, font_prop);
     return result;
 }
 
@@ -2065,6 +2070,105 @@ int32_t get_align_x_offset(FontProp::HorizontalAlign align, const BoundingBox &s
     default: break;
     }
     return 0;
+}
+
+void warp_shape(ExPolygonsWithIds &shapes, const FontProp &prop)
+{
+    using Warp       = FontProp::Warp;
+    const int   style = prop.warp.value_or(0);
+    const double bend = std::clamp(double(prop.warp_bend.value_or(0.f)), -1., 1.);
+    if (style <= int(Warp::none) || style >= int(Warp::count) || std::abs(bend) < 1e-3)
+        return;
+    BoundingBox bb;
+    for (const ExPolygonsWithId &shape : shapes)
+        bb.merge(get_extents(shape.expoly));
+    if (!bb.defined)
+        return;
+    const double cx = 0.5 * (double(bb.min.x()) + double(bb.max.x()));
+    const double cy = 0.5 * (double(bb.min.y()) + double(bb.max.y()));
+    const double hw = std::max(1., 0.5 * double(bb.max.x() - bb.min.x()));
+    const double hh = std::max(1., 0.5 * double(bb.max.y() - bb.min.y()));
+
+    // Positive bend lifts or swells the middle, as in Photoshop; u and v run -1..1 across the text.
+    const auto map = [&](double px, double py) -> Point {
+        const double x = px - cx, y = py - cy;
+        const double u = x / hw, v = y / hh;
+        const double hump = 1. - u * u; // 1 in the middle, 0 at both ends
+        double nx = x, ny = y;
+        switch (Warp(style)) {
+        case Warp::arc: {
+            // Round a circle: up to a half circle at full bend.
+            const double radius = 2. * hw / (bend * PI);
+            const double angle  = x / radius;
+            const double r      = radius + y;
+            nx = r * std::sin(angle);
+            ny = r * std::cos(angle) - radius;
+            break;
+        }
+        case Warp::arc_lower: ny = y - bend * hh * hump * 0.75 * (1. - v); break;
+        case Warp::arc_upper: ny = y + bend * hh * hump * 0.75 * (1. + v); break;
+        case Warp::arch: ny = y + bend * hh * 1.5 * hump; break;
+        case Warp::bulge: ny = y * (1. + bend * hump); break;
+        case Warp::shell_lower:
+            ny = y - bend * hh * hump * 0.5 * (1. - v);
+            nx = x * (1. - bend * 0.3 * 0.5 * (1. - v));
+            break;
+        case Warp::shell_upper:
+            ny = y + bend * hh * hump * 0.5 * (1. + v);
+            nx = x * (1. - bend * 0.3 * 0.5 * (1. + v));
+            break;
+        case Warp::flag: ny = y + bend * hh * 0.8 * std::sin(PI * u); break;
+        case Warp::wave: ny = y + bend * hh * 0.6 * std::sin(2. * PI * u + 0.5 * v); break;
+        case Warp::fish: ny = y * (1. + bend * 1.2 * std::sin(0.5 * PI * (u + 1.))) + bend * hh * 0.3 * u; break;
+        case Warp::rise: ny = y + bend * hh * u; break;
+        case Warp::fisheye: {
+            const double s = 1. + bend * 0.35 * std::max(0., 1. - 0.5 * (u * u + v * v));
+            nx = x * s;
+            ny = y * s;
+            break;
+        }
+        case Warp::inflate:
+            nx = x * (1. + bend * 0.15 * (1. - v * v));
+            ny = y * (1. + bend * 0.6 * hump);
+            break;
+        case Warp::squeeze:
+            nx = x * (1. - bend * 0.25 * (1. - v * v));
+            ny = y * (1. + bend * 0.3 * hump);
+            break;
+        case Warp::twist: {
+            const double a = bend * 0.25 * PI * u;
+            nx = x * std::cos(a) - y * std::sin(a);
+            ny = x * std::sin(a) + y * std::cos(a);
+            break;
+        }
+        default: break;
+        }
+        return Point(coord_t(std::llround(nx + cx)), coord_t(std::llround(ny + cy)));
+    };
+
+    // Dense enough that a bent stroke looks curved: a twentieth of the smaller half size.
+    const double max_step = std::max(1., std::min(hw, hh) / 20.);
+    const auto warp_polygon = [&](Polygon &polygon) {
+        Points warped;
+        warped.reserve(polygon.points.size() * 2);
+        for (size_t i = 0; i < polygon.points.size(); ++i) {
+            const Point &a     = polygon.points[i];
+            const Point &b     = polygon.points[(i + 1) % polygon.points.size()];
+            const double len   = (b - a).cast<double>().norm();
+            const int    steps = std::max(1, int(std::ceil(len / max_step)));
+            for (int k = 0; k < steps; ++k) {
+                const double t = double(k) / steps;
+                warped.push_back(map(a.x() + t * (b.x() - a.x()), a.y() + t * (b.y() - a.y())));
+            }
+        }
+        polygon.points = std::move(warped);
+    };
+    for (ExPolygonsWithId &shape : shapes)
+        for (ExPolygon &expoly : shape.expoly) {
+            warp_polygon(expoly.contour);
+            for (Polygon &hole : expoly.holes)
+                warp_polygon(hole);
+        }
 }
 
 void align_shape(ExPolygonsWithIds &shapes, const std::wstring &text, const FontProp &prop, const FontFile &font)

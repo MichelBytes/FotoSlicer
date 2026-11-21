@@ -3142,6 +3142,12 @@ MainFrame::PhotoshopMenus MainFrame::create_photoshop_menus()
     append_menu_item(ps.type, wxID_ANY, _L("Engrave Text"), _L("Cut text into the selected object"),
         [](wxCommandEvent&) { MenuFactory::add_text_volume(ModelVolumeType::NEGATIVE_VOLUME); }, "", nullptr, object_selected, this);
     ps.type->AppendSeparator();
+    // As in Photoshop: Warp Text and the Character settings, both in the Type tool's Character section.
+    append_menu_item(ps.type, wxID_ANY, _L("Warp Text..."), _L("Bend the text: arc, arch, bulge, flag, wave and more"),
+        [this](wxCommandEvent&) { open_tool(Shortcut::GizmoEmboss); }, "", nullptr, [this]() { return m_plater != nullptr; }, this);
+    append_menu_item(ps.type, wxID_ANY, _L("Character..."), _L("Font, letter and line spacing, alignment and warp"),
+        [this](wxCommandEvent&) { open_tool(Shortcut::GizmoEmboss); }, "", nullptr, [this]() { return m_plater != nullptr; }, this);
+    ps.type->AppendSeparator();
     append_menu_item(ps.type, wxID_ANY, _L("Add SVG Shape"), _L("Add a raised shape from an SVG file"),
         [](wxCommandEvent&) { MenuFactory::add_svg_volume(ModelVolumeType::MODEL_PART); }, "", nullptr, object_selected, this);
     append_menu_item(ps.type, wxID_ANY, _L("Engrave SVG Shape"), _L("Cut a shape from an SVG file into the selected object"),

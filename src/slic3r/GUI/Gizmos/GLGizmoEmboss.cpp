@@ -54,6 +54,7 @@
 #include <wx/gdicmn.h>
 #include "libslic3r/Utils.hpp"
 #include <wx/settings.h>
+#include <array>
 #include <cmath>
 #include <string_view>
 #include "libslic3r/Config.hpp"
@@ -1526,8 +1527,10 @@ void GLGizmoEmboss::draw_window(float x, float y)
         ImGui::SetNextTreeNodeOpen(false);
 
     // ImGui Bug: After switching to another window and switching back, clicking the text doesnt open/close the TreeNode anymore
-    ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_FramePadding;
-    if (ImGui::TreeNodeEx(_u8L("Advanced").c_str(), flags)) {
+    // FotoSlicer: open from the start and named after Photoshop's Character panel, which holds the
+    // same settings, with Warp Text among them.
+    ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_FramePadding | ImGuiTreeNodeFlags_DefaultOpen;
+    if (ImGui::TreeNodeEx((_u8L("Character") + "###advanced").c_str(), flags)) {
         if (!m_is_advanced_edit_style) {
             m_is_advanced_edit_style = true;
             m_imgui->set_requires_extra_frame();
@@ -3166,6 +3169,46 @@ void GLGizmoEmboss::draw_advanced()
         ImGuiWrapper::pop_combo_style();
         if (!tooltip.empty())
             m_imgui->tooltip(tooltip, m_gui_cfg->max_tooltip_width);
+    }
+
+    // FotoSlicer: Photoshop's Warp Text: a style, and how far the text bends.
+    {
+        static const std::array<const char*, size_t(FontProp::Warp::count)> warp_names = {
+            L("None"),        L("Arc"),         L("Arc Lower"), L("Arc Upper"), L("Arch"),    L("Bulge"),
+            L("Shell Lower"), L("Shell Upper"), L("Flag"),      L("Wave"),      L("Fish"),    L("Rise"),
+            L("Fisheye"),     L("Inflate"),     L("Squeeze"),   L("Twist")};
+        const int warp = std::clamp(current_prop.warp.value_or(0), 0, int(warp_names.size()) - 1);
+        ImGui::AlignTextToFramePadding();
+        ImGui::Text("%s", _u8L("Warp").c_str());
+        ImGui::SameLine(m_gui_cfg->advanced_input_offset);
+        ImGui::SetNextItemWidth(m_gui_cfg->input_width);
+        ImGuiWrapper::push_combo_style(m_parent.get_scale());
+        if (ImGui::BBLBeginCombo("##warp_style", _u8L(warp_names[warp]).c_str())) {
+            for (int i = 0; i < int(warp_names.size()); ++i) {
+                if (ImGui::BBLSelectable(_u8L(warp_names[i]).c_str(), i == warp) && i != warp) {
+                    current_prop.warp = i == 0 ? std::nullopt : std::optional<int>(i);
+                    if (i != 0 && !current_prop.warp_bend.has_value())
+                        current_prop.warp_bend = 0.5f;
+                    exist_change = true;
+                    last_change  = true;
+                }
+            }
+            ImGui::EndCombo();
+        }
+        ImGuiWrapper::pop_combo_style();
+        if (warp != 0) {
+            float bend = current_prop.warp_bend.value_or(0.5f) * 100.f;
+            ImGui::AlignTextToFramePadding();
+            ImGui::Text("%s", _u8L("Bend").c_str());
+            ImGui::SameLine(m_gui_cfg->advanced_input_offset);
+            ImGui::SetNextItemWidth(m_gui_cfg->input_width);
+            if (m_imgui->slider_float("##warp_bend", &bend, -100.f, 100.f, "%.0f %%", 1.f, true, _L("How far the text bends"))) {
+                current_prop.warp_bend = std::clamp(bend, -100.f, 100.f) / 100.f;
+                exist_change           = true;
+            }
+            if (m_imgui->get_last_slider_status().deactivated_after_edit)
+                last_change = true;
+        }
     }
 
     if (exist_change || last_change) {

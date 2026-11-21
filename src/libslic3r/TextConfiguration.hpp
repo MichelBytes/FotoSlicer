@@ -45,6 +45,12 @@ struct FontProp
     // Distiguish projection per glyph
     bool per_glyph;
 
+    // FotoSlicer: Photoshop's Warp Text. `warp` is a Warp style (none when unset); `warp_bend`, from
+    // -1 to 1, is how far the text bends. Applied to the aligned text before it is embossed.
+    enum class Warp { none = 0, arc, arc_lower, arc_upper, arch, bulge, shell_lower, shell_upper, flag, wave, fish, rise, fisheye, inflate, squeeze, twist, count };
+    std::optional<int>   warp;
+    std::optional<float> warp_bend;
+
     // NOTE: way of serialize to 3mf force that zero must be default value
     enum class HorizontalAlign { left = 0, center, right };
     enum class VerticalAlign { top = 0, center, bottom };
@@ -85,7 +91,9 @@ struct FontProp
             align == other.align &&
             is_approx(size_in_mm, other.size_in_mm) && 
             is_approx(boldness, other.boldness) &&
-            is_approx(skew, other.skew);
+            is_approx(skew, other.skew) &&
+            warp == other.warp &&
+            is_approx(warp_bend, other.warp_bend);
     }
 
     // undo / redo stack recovery
@@ -97,6 +105,8 @@ struct FontProp
         cereal::save(ar, boldness);
         cereal::save(ar, skew);
         cereal::save(ar, collection_number);
+        cereal::save(ar, warp);
+        cereal::save(ar, warp_bend);
     }
     template<class Archive> void load(Archive &ar)
     {
@@ -106,6 +116,8 @@ struct FontProp
         cereal::load(ar, boldness);
         cereal::load(ar, skew);
         cereal::load(ar, collection_number);
+        cereal::load(ar, warp);
+        cereal::load(ar, warp_bend);
     }
 };
 

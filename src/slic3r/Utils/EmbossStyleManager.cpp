@@ -571,6 +571,8 @@ const std::string APP_CONFIG_VERTICAL_ALIGN   = "vertical_align";
 const std::string APP_CONFIG_HORIZONTAL_ALIGN = "horizontal_align";
 const std::string APP_CONFIG_FONT_BOLDNESS    = "boldness";
 const std::string APP_CONFIG_FONT_SKEW        = "skew";
+const std::string APP_CONFIG_FONT_WARP        = "warp";
+const std::string APP_CONFIG_FONT_WARP_BEND   = "warp_bend";
 const std::string APP_CONFIG_FONT_DISTANCE    = "distance";
 const std::string APP_CONFIG_FONT_ANGLE       = "angle";
 const std::string APP_CONFIG_FONT_COLLECTION  = "collection";
@@ -723,6 +725,8 @@ std::optional<StyleManager::Style> load_style(const Section &app_cfg_section)
     read(app_cfg_section, APP_CONFIG_FONT_ANGLE, s.angle);
     read(app_cfg_section, APP_CONFIG_FONT_COLLECTION, fp.collection_number);
     read(app_cfg_section, APP_CONFIG_FONT_CHAR_GAP, fp.char_gap);
+    read(app_cfg_section, APP_CONFIG_FONT_WARP, fp.warp);
+    read(app_cfg_section, APP_CONFIG_FONT_WARP_BEND, fp.warp_bend);
     read(app_cfg_section, APP_CONFIG_FONT_LINE_GAP, fp.line_gap);
     return s;
 }
@@ -758,6 +762,10 @@ void store_style(AppConfig &cfg, const StyleManager::Style &s, unsigned index)
         data[APP_CONFIG_FONT_CHAR_GAP] = std::to_string(*fp.char_gap);
     if (fp.line_gap.has_value())
         data[APP_CONFIG_FONT_LINE_GAP] = std::to_string(*fp.line_gap);
+    if (fp.warp.has_value())
+        data[APP_CONFIG_FONT_WARP] = std::to_string(*fp.warp);
+    if (fp.warp_bend.has_value())
+        data[APP_CONFIG_FONT_WARP_BEND] = std::to_string(*fp.warp_bend);
     cfg.set_section(create_section_name(index), std::move(data));
 }
 
