@@ -86,11 +86,9 @@ struct BrowserSearch
     const char* name;
     const char* url;
     const char* link_pattern; // a model page's address, as a JavaScript regular expression
-    bool        thangs_api;
 };
-const std::array<BrowserSearch, 2> BROWSER_SEARCHES = {{
-    {"Thingiverse", "https://www.thingiverse.com/search?q=%s&type=things&sort=relevant", R"(thing:\d+/?([?#].*)?$)", false},
-    {"Thangs", "https://thangs.com/search/%s?scope=all", R"(thangs\.com/(m/\d+|.*3d-model))", true},
+const std::array<BrowserSearch, 1> BROWSER_SEARCHES = {{
+    {"Thingiverse", "https://www.thingiverse.com/search?q=%s&type=things&sort=relevant", R"(thing:\d+/?([?#].*)?$)"},
 }};
 
 // A JavaScript string literal, safe inside a <script> element too.
@@ -152,20 +150,6 @@ const char* COLLECT_SCRIPT = R"JS((function () {
     } else setTimeout(poll, 500);
   };
   poll();
-})();)JS";
-
-// Thangs: the JSON its search page asks for, which has likes and downloads; paid models left out.
-const char* THANGS_SCRIPT = R"JS((function () {
-  const site = SITE, query = QUERY;
-  const send = (message) => window.wx.postMessage(JSON.stringify(Object.assign({fotoslicer_search: site, query: query}, message)));
-  fetch('/api/search/v5/search-by-text?searchTerm=' + encodeURIComponent(query) + '&page=0&pageSize=24&pageScope=root',
-        {headers: {Accept: 'application/json'}, credentials: 'include'})
-    .then(r => r.ok ? r.json() : Promise.reject('HTTP ' + r.status))
-    .then(d => send({items: (d.items || [])
-      .filter(it => !(it.visibility === 'market-paid' || (it.marketplaceInfo && it.marketplaceInfo.priceInUSD)))
-      .map(it => ({title: it.name || '', url: it.modelPageUrl || ('https://thangs.com/m/' + it.modelId),
-                   image: it.thumbnailUrl || '', likes: it.likesCount || 0, downloads: it.downloadCount || 0}))}))
-    .catch(() => send({fallback: true}));
 })();)JS";
 
 const char* PRINTABLES_QUERY = R"GQL(query SearchModels($query: String!, $limit: Int, $offset: Int, $ordering: SearchChoicesEnum) {
@@ -447,7 +431,7 @@ void ModelsPanel::on_searcher_loaded(const std::string& url)
     const std::string    host = std::string(site.url).substr(0, std::string(site.url).find('/', 8));
     if (!boost::istarts_with(url, host))
         return;
-    m_searcher->RunScript(from_u8(fill_script(site.thangs_api ? THANGS_SCRIPT : COLLECT_SCRIPT, site, m_query)));
+    m_searcher->RunScript(from_u8(fill_script(COLLECT_SCRIPT, site, m_query)));
     m_search_timer.StartOnce(20000);
 }
 
@@ -459,11 +443,6 @@ void ModelsPanel::on_searcher_message(const wxString& message)
     const nlohmann::json answer = nlohmann::json::parse(into_u8(message), nullptr, false);
     if (!answer.is_object() || answer.value("fotoslicer_search", std::string()) != site.name || answer.value("query", std::string()) != m_query)
         return;
-    if (answer.value("fallback", false)) {
-        // Thangs' JSON was refused: read the links on its results page instead.
-        m_searcher->RunScript(from_u8(fill_script(COLLECT_SCRIPT, site, m_query)));
-        return;
-    }
     const auto items = answer.find("items");
     add_results(site.name, items != answer.end() ? items->dump() : "[]", answer.value("error", std::string()));
     ++m_search_site;
@@ -596,6 +575,28 @@ void ModelsPanel::search_sites_with_json(const std::string& query)
                                          {"image", text(item, "mold_image")},
                                          {"likes", number(item, "like_num")},
                                          {"downloads", number(item, "download_num")}});
+                    }
+                    return items;
+                });
+
+    // Thangs: the search its page asks for. Models for sale are left out.
+    search_json("Thangs",
+                Http::get("https://thangs.com/api/search/v5/search-by-text?searchTerm=" + Http::url_encode(query) + "&page=0&pageSize=24&pageScope=root"),
+                [=](const nlohmann::json& answer) {
+                    nlohmann::json items = nlohmann::json::array();
+                    for (const nlohmann::json& item : array_at(answer, {"items"})) {
+                        const std::string id   = id_of(item, "modelId");
+                        const auto        sale = item.find("marketplaceInfo");
+                        if (id.empty() || text(item, "visibility") == "market-paid" || (sale != item.end() && sale->is_object() && number(*sale, "priceInUSD") > 0))
+                            continue;
+                        std::string url = text(item, "modelPageUrl");
+                        if (!boost::istarts_with(url, "https://"))
+                            url = "https://thangs.com/m/" + id;
+                        items.push_back({{"title", text(item, "name")},
+                                         {"url", url},
+                                         {"image", text(item, "thumbnailUrl")},
+                                         {"likes", number(item, "likesCount")},
+                                         {"downloads", number(item, "downloadCount")}});
                     }
                     return items;
                 });

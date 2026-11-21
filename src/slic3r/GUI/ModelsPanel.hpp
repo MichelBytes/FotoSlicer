@@ -51,8 +51,8 @@ private:
     void on_searcher_loaded(const std::string& url);
     void on_searcher_message(const wxString& message);
     void add_results(const std::string& site, const std::string& items_json, const std::string& error);
-    // Searches the sites with a JSON search a plain request may ask: Printables, Makeronline and
-    // MakerWorld, all at once.
+    // Searches the sites with a JSON search a plain request may ask: Printables, Makeronline,
+    // Thangs and MakerWorld, all at once.
     void search_sites_with_json(const std::string& query);
     void search_json(const std::string& site, Http http, const std::function<nlohmann::json(const nlohmann::json&)>& items_of);
     void run_on_results_page(const std::string& script);
