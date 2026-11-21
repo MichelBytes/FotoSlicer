@@ -85,7 +85,7 @@ struct BrowserSearch
 };
 const std::array<BrowserSearch, 4> BROWSER_SEARCHES = {{
     {"Makeronline", "https://makeronline.com/en/", R"(/model/[^/]+/\d+\.html)", true, false},
-    {"Thingiverse", "https://www.thingiverse.com/search?q=%s&type=things&sort=relevant", R"(thing:\d+)", false, false},
+    {"Thingiverse", "https://www.thingiverse.com/search?q=%s&type=things&sort=relevant", R"(thing:\d+/?([?#].*)?$)", false, false},
     {"MakerWorld", "https://makerworld.com/en/search/models?keyword=%s", R"(/models/\d+)", false, false},
     {"Thangs", "https://thangs.com/search/%s?scope=all", R"(thangs\.com/(m/\d+|.*3d-model))", false, true},
 }};
@@ -139,7 +139,15 @@ const char* COLLECT_SCRIPT = R"JS((function () {
     return Array.from(found.values()).filter(e => e.title || e.image).slice(0, 24);
   };
   let tries = 0;
-  const poll = () => { const items = collect(); if (items.length >= 6 || ++tries > 30) send(items); else setTimeout(poll, 500); };
+  const poll = () => {
+    const items = collect();
+    if (items.length >= 6 || ++tries > 30) {
+      // Nothing found: say what page the site showed, for the results page's tooltip.
+      if (!items.length) window.wx.postMessage(JSON.stringify({fotoslicer_search: site, query: query, items: [],
+        error: (document.title || '').slice(0, 60) + ' | ' + location.href.slice(0, 90) + ' | ' + document.querySelectorAll('a[href]').length + ' links'}));
+      else send(items);
+    } else setTimeout(poll, 500);
+  };
   poll();
 })();)JS";
 
@@ -193,13 +201,15 @@ a.card:hover{border-color:#2f6fd6}a.card img{width:100%;aspect-ratio:4/3;object-
 </style></head><body><header><h1 id="h"></h1><div id="sites"></div></header><div id="grid"></div><script>
 const results = [], status = {};
 document.getElementById('h').textContent = TITLE;
-function chips() { const box = document.getElementById('sites'); box.replaceChildren(...Object.keys(status).map(s => { const e = document.createElement('span'); e.textContent = s + ': ' + status[s]; return e; })); }
+const notes = {};
+function chips() { const box = document.getElementById('sites'); box.replaceChildren(...Object.keys(status).map(s => { const e = document.createElement('span'); e.textContent = s + ': ' + status[s] + (notes[s] && status[s] === NONE ? ' (' + notes[s] + ')' : ''); return e; })); }
 function fsStatus(site, text) { status[site] = text; chips(); }
 function known(r) { return r.likes >= 0 || r.downloads >= 0; }
 function pop(r) { return Math.log10(1 + Math.max(0, r.downloads || 0) + 10 * Math.max(0, r.likes || 0)); }
 function fsAdd(site, items, note) {
   items.forEach((it, i) => { it.site = site; it.pos = i; it.n = items.length; results.push(it); });
-  status[site] = note || (items.length ? items.length + ' ' + FOUND : NONE);
+  status[site] = items.length ? items.length + ' ' + FOUND : NONE;
+  if (note) notes[site] = note;
   chips();
   const top = Math.max(3, ...results.filter(known).map(pop));
   const score = r => known(r) ? pop(r) : top * 0.95 * (1 - r.pos / (r.n + 1));
@@ -419,10 +429,11 @@ void ModelsPanel::start_search()
 
     search_printables(query);
     if (m_searcher == nullptr) {
-        // Hidden in all but name: a browser too small to see still runs its pages at full speed.
+        // A browser placed out of sight runs its pages at full speed, unlike a hidden one.
         m_searcher = WebView::CreateWebView(this, "about:blank");
         if (m_searcher != nullptr) {
-            m_searcher->SetSize(FromDIP(wxSize(2, 2)));
+            // Full size but outside the panel: sites draw their results only into a real viewport.
+            m_searcher->SetSize(-4000, -4000, FromDIP(1280), FromDIP(900));
             m_searcher->Bind(wxEVT_WEBVIEW_LOADED, [this](wxWebViewEvent&) { on_searcher_loaded(); });
             m_searcher->Bind(wxEVT_WEBVIEW_SCRIPT_MESSAGE_RECEIVED, [this](wxWebViewEvent& event) { on_searcher_message(event.GetString()); });
             m_searcher->Bind(wxEVT_WEBVIEW_NEWWINDOW, [](wxWebViewEvent&) {});

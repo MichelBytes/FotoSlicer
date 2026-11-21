@@ -2845,6 +2845,49 @@ void GLGizmoEmboss::draw_advanced()
 
     FontProp &font_prop = m_style_manager.get_font_prop();
     const FontFile::Info &font_info = get_font_info(*ff.font_file, font_prop);
+
+    // FotoSlicer: Warp first, as the Character settings people reach for most.
+    bool warp_changed = false, warp_last_change = false;
+    // FotoSlicer: Photoshop's Warp Text: a style, and how far the text bends.
+    {
+        static const std::array<const char*, size_t(FontProp::Warp::count)> warp_names = {
+            L("None"),        L("Arc"),         L("Arc Lower"), L("Arc Upper"), L("Arch"),    L("Bulge"),
+            L("Shell Lower"), L("Shell Upper"), L("Flag"),      L("Wave"),      L("Fish"),    L("Rise"),
+            L("Fisheye"),     L("Inflate"),     L("Squeeze"),   L("Twist")};
+        const int warp = std::clamp(font_prop.warp.value_or(0), 0, int(warp_names.size()) - 1);
+        ImGui::AlignTextToFramePadding();
+        ImGui::Text("%s", _u8L("Warp").c_str());
+        ImGui::SameLine(m_gui_cfg->advanced_input_offset);
+        ImGui::SetNextItemWidth(m_gui_cfg->input_width);
+        ImGuiWrapper::push_combo_style(m_parent.get_scale());
+        if (ImGui::BBLBeginCombo("##warp_style", _u8L(warp_names[warp]).c_str())) {
+            for (int i = 0; i < int(warp_names.size()); ++i) {
+                if (ImGui::BBLSelectable(_u8L(warp_names[i]).c_str(), i == warp) && i != warp) {
+                    font_prop.warp = i == 0 ? std::nullopt : std::optional<int>(i);
+                    if (i != 0 && !font_prop.warp_bend.has_value())
+                        font_prop.warp_bend = 0.5f;
+                    warp_changed = true;
+                    warp_last_change = true;
+                }
+            }
+            ImGui::EndCombo();
+        }
+        ImGuiWrapper::pop_combo_style();
+        if (warp != 0) {
+            float bend = font_prop.warp_bend.value_or(0.5f) * 100.f;
+            ImGui::AlignTextToFramePadding();
+            ImGui::Text("%s", _u8L("Bend").c_str());
+            ImGui::SameLine(m_gui_cfg->advanced_input_offset);
+            ImGui::SetNextItemWidth(m_gui_cfg->input_width);
+            if (m_imgui->slider_float("##warp_bend", &bend, -100.f, 100.f, "%.0f %%", 1.f, true, _L("How far the text bends"))) {
+                font_prop.warp_bend = std::clamp(bend, -100.f, 100.f) / 100.f;
+                warp_changed = true;
+            }
+            if (m_imgui->get_last_slider_status().deactivated_after_edit)
+                warp_last_change = true;
+        }
+    }
+
 #ifdef SHOW_FONT_FILE_PROPERTY
     ImGui::SameLine();
     int cache_size = ff.has_value()? (int)ff.cache->size() : 0;
@@ -3171,45 +3214,8 @@ void GLGizmoEmboss::draw_advanced()
             m_imgui->tooltip(tooltip, m_gui_cfg->max_tooltip_width);
     }
 
-    // FotoSlicer: Photoshop's Warp Text: a style, and how far the text bends.
-    {
-        static const std::array<const char*, size_t(FontProp::Warp::count)> warp_names = {
-            L("None"),        L("Arc"),         L("Arc Lower"), L("Arc Upper"), L("Arch"),    L("Bulge"),
-            L("Shell Lower"), L("Shell Upper"), L("Flag"),      L("Wave"),      L("Fish"),    L("Rise"),
-            L("Fisheye"),     L("Inflate"),     L("Squeeze"),   L("Twist")};
-        const int warp = std::clamp(current_prop.warp.value_or(0), 0, int(warp_names.size()) - 1);
-        ImGui::AlignTextToFramePadding();
-        ImGui::Text("%s", _u8L("Warp").c_str());
-        ImGui::SameLine(m_gui_cfg->advanced_input_offset);
-        ImGui::SetNextItemWidth(m_gui_cfg->input_width);
-        ImGuiWrapper::push_combo_style(m_parent.get_scale());
-        if (ImGui::BBLBeginCombo("##warp_style", _u8L(warp_names[warp]).c_str())) {
-            for (int i = 0; i < int(warp_names.size()); ++i) {
-                if (ImGui::BBLSelectable(_u8L(warp_names[i]).c_str(), i == warp) && i != warp) {
-                    current_prop.warp = i == 0 ? std::nullopt : std::optional<int>(i);
-                    if (i != 0 && !current_prop.warp_bend.has_value())
-                        current_prop.warp_bend = 0.5f;
-                    exist_change = true;
-                    last_change  = true;
-                }
-            }
-            ImGui::EndCombo();
-        }
-        ImGuiWrapper::pop_combo_style();
-        if (warp != 0) {
-            float bend = current_prop.warp_bend.value_or(0.5f) * 100.f;
-            ImGui::AlignTextToFramePadding();
-            ImGui::Text("%s", _u8L("Bend").c_str());
-            ImGui::SameLine(m_gui_cfg->advanced_input_offset);
-            ImGui::SetNextItemWidth(m_gui_cfg->input_width);
-            if (m_imgui->slider_float("##warp_bend", &bend, -100.f, 100.f, "%.0f %%", 1.f, true, _L("How far the text bends"))) {
-                current_prop.warp_bend = std::clamp(bend, -100.f, 100.f) / 100.f;
-                exist_change           = true;
-            }
-            if (m_imgui->get_last_slider_status().deactivated_after_edit)
-                last_change = true;
-        }
-    }
+    exist_change |= warp_changed;
+    last_change |= warp_last_change;
 
     if (exist_change || last_change) {
         m_style_manager.clear_glyphs_cache();
